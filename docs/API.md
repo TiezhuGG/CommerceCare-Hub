@@ -1,0 +1,30 @@
+# API Design
+
+API 前缀为 `/api/v1`，使用 JSON、OpenAPI、OAuth2/JWT（Phase 1）和统一错误格式：`{ "code", "message", "trace_id", "details" }`。所有变更操作要求 `Idempotency-Key`，并返回 `trace_id`。
+
+| 方法 | 路径 | 角色 | 目的 |
+| --- | --- | --- | --- |
+| POST | `/conversations` | Customer | 发起会话 |
+| POST | `/conversations/{id}/messages` | Customer/Operator | 发送消息并触发工作流 |
+| GET | `/conversations/{id}` | Owner/Operator | 读取会话、状态与脱敏消息 |
+| GET | `/tickets` | Operator/Supervisor/Admin | 工单列表（受范围过滤） |
+| GET | `/tickets/{id}` | Scoped staff | 工单详情及时间线 |
+| POST | `/approvals/{id}/decision` | Supervisor | 审批或拒绝动作 |
+| POST | `/conversations/{id}/handoff` | Operator/Supervisor | 人工接管 |
+| GET | `/workflow-runs/{trace_id}` | Scoped staff | 读取工作流 trace 摘要 |
+| POST | `/admin/demo/seed` | Admin | 幂等加载演示数据 |
+| POST | `/admin/demo/reset` | Admin | 仅开发环境重置演示数据 |
+| POST | `/admin/evaluations/run` | Admin | 运行评估集 |
+| GET | `/metrics/dashboard` | Supervisor/Admin | 读取聚合指标 |
+
+## 核心请求契约
+
+`POST /conversations/{id}/messages`：`{message, client_message_id, attachments?}`。消息体限制、附件元数据与客户归属均在 API 层校验；返回 `{conversation_id, ticket_id, trace_id, workflow_status, customer_reply?}`。
+
+`POST /approvals/{id}/decision`：`{decision: APPROVE|REJECT, reason_code, comment?}`。决策必须由当前有权限的 Supervisor 作出，过期或已决请求返回 `APPROVAL_NOT_ACTIONABLE`。
+
+`GET /workflow-runs/{trace_id}` 不返回私有推理、提示词全文或未脱敏 PII；只返回 agent/工具/证据/状态迁移的结构化摘要。
+
+## Provider 端口
+
+只读：`get_order`、`get_customer`、`search_products`、`get_inventory`、`get_shipment`、`search_policy`。写入：`create_ticket`、`update_ticket`、`update_address`、`request_refund`、`request_return`、`create_carrier_inquiry`、`send_customer_message`、`request_human_approval`。每个写入命令统一含 `actor`、`reason_code`、`idempotency_key`，并在领域层执行授权检查和审计。
