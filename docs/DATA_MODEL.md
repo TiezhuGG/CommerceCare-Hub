@@ -8,6 +8,7 @@
 
 | 表 | 关键字段与约束 |
 | --- | --- |
+| users | `id`, `email` unique, `password_hash`, `role`, optional `customer_id`；RBAC 身份与客户归属绑定 |
 | customers | `id`, `external_id` unique, `tier`, `pii_token`；不保存完整 PII 明文 |
 | products | `id`, `external_id` unique, `title`, `status` |
 | skus | `id`, `product_id`, `sku_code` unique, `price_minor`, `currency` |
@@ -27,6 +28,8 @@
 | prompt_versions | `id`, `prompt_key`, `version`, `template`, `active`, unique(`prompt_key`,`version`) |
 | eval_cases | `id`, `category`, `input`, `expected_result`, `active` |
 | audit_logs | `id`, `trace_id`, `actor_id`, `event_type`, `resource_type`, `resource_id`, `payload_redacted`, `occurred_at` |
+| idempotency_records | `action_type`, `target_resource_id`, `idempotency_key` 联合唯一；保存首次响应以安全重放 |
+| outbox_events | `event_type`, aggregate 引用、payload、`published_at`；与领域写入同事务创建 |
 
 ## 3. 幂等与一致性
 

@@ -2,7 +2,7 @@
 
 CommerceCare Hub 是一个可本地运行的电商服务 AI Agent 系统，覆盖售前咨询、订单与物流查询，以及受控的售后处置。它面向面试演示，但以生产级的正确性、可审计性、可恢复性与安全边界为优先。
 
-当前仓库处于 **Phase 0（规格设计）**：尚未提供可执行应用。产品范围、架构、数据模型、安全策略与后续实施顺序均已固化在 `docs/`。
+当前仓库已完成 **Phase 1（基础设施）**：提供 FastAPI、Next.js、Alembic、JWT/RBAC、审计/幂等基础、deterministic mock provider 与合成演示数据。客户会话工作流和业务处置将在 Phase 2 起交付。
 
 ## 核心原则
 
@@ -35,3 +35,35 @@ CommerceCare Hub 是一个可本地运行的电商服务 AI Agent 系统，覆�
 7. Phase 6：演示包装与可视化材料
 
 详见 [实施状态](docs/IMPLEMENTATION_STATUS.md)。
+
+## 本地运行
+
+前置条件：Python 3.12+ 与 `uv`、Node.js 24+、Docker Desktop（用于完整 Compose 环境）。从 `.env.example` 创建仅限本地的 `.env` 后执行：
+
+```powershell
+Copy-Item .env.example .env
+uv sync --all-groups
+uv run alembic upgrade head
+uv run python scripts/seed.py
+uv run uvicorn app.main:app --app-dir backend --reload
+```
+
+API 文档位于 `http://localhost:8000/docs`。合成演示账号是 `admin@demo.local`、`supervisor@demo.local`、`operator@demo.local`、`customer1@demo.local`；密码使用 `.env` 中的 `COMMERCECARE_DEMO_PASSWORD`。这些账号仅能用于本地合成数据。
+
+完整容器启动：
+
+```powershell
+docker compose up --build
+```
+
+## 验证命令
+
+```powershell
+uv run ruff format --check backend/app backend/tests
+uv run ruff check backend/app backend/tests
+uv run mypy backend/app
+uv run pytest
+npm --prefix frontend run check
+npm --prefix frontend run build
+docker compose --env-file .env.example config
+```

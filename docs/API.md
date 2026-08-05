@@ -4,6 +4,11 @@ API 前缀为 `/api/v1`，使用 JSON、OpenAPI、OAuth2/JWT（Phase 1）和统�
 
 | 方法 | 路径 | 角色 | 目的 |
 | --- | --- | --- | --- |
+| GET | `/healthz` | Public | 存活探针 |
+| POST | `/auth/token` | Public | 演示/生产身份认证，签发 JWT |
+| GET | `/me` | Authenticated | 返回当前身份及角色 |
+| GET | `/orders/{order_number}` | Owner/Staff | 验证资源归属后读取订单与物流摘要 |
+| GET | `/audit-logs` | Supervisor/Admin | 读取最近的脱敏审计记录 |
 | POST | `/conversations` | Customer | 发起会话 |
 | POST | `/conversations/{id}/messages` | Customer/Operator | 发送消息并触发工作流 |
 | GET | `/conversations/{id}` | Owner/Operator | 读取会话、状态与脱敏消息 |

@@ -2,15 +2,29 @@
 
 ## 当前状态
 
-**Phase 0 — 完成（2026-07-30）**。仓库此前为空；本阶段仅建立规范和决策，不包含应用、迁移、依赖、容器、种子数据或测试代码。
+**Phase 1 — 实现完成，Docker runtime 验证待复核（2026-07-30）**。已交付本地可运行的应用基础设施；本机 Docker Desktop 引擎未运行，因而未能完成 `docker compose up` 的最终 runtime 验证。
 
 ## 交付物
 
-- 产品、架构、数据、API、安全、评估和演示规范。
-- 五项 ADR：职责边界、provider 抽象、状态机、幂等与审计、PII/不可信输入。
-- Phase 1–6 路线图、验收标准、假设与风险。
+- Python 3.12+ FastAPI backend、Next.js/TypeScript frontend、Docker Compose、Makefile、`.env.example`、`uv.lock` 与前端 lockfile。
+- SQLAlchemy 2 模型、Alembic 初始迁移、PostgreSQL/Redis Compose 定义与 30/100/100/100 合成 seed/reset 工具。
+- JWT/PBKDF2 认证、RBAC、订单归属授权、trace ID、统一错误契约、audit log、idempotency record 和 outbox 基础。
+- 只读/写入 provider ports 与 deterministic mock adapters；7 个后端回归测试和前端编译检查。
 
-## 推荐 Phase 1 顺序
+## 已执行的验证
+
+- `uv run ruff format --check backend/app backend/tests`
+- `uv run ruff check backend/app backend/tests`
+- `uv run mypy backend/app`
+- `uv run pytest`（7 passed）
+- Alembic SQLite 临时库 `upgrade → seed → downgrade → upgrade`（通过）
+- `npm --prefix frontend run check` 与 `npm --prefix frontend run build`（通过）
+- `npm audit --omit=dev --audit-level=high`（0 vulnerabilities）
+- `docker compose --env-file .env.example config`（通过）
+
+`docker compose up --build` 尚未通过：本机 `desktop-linux` Docker 引擎管道不存在，且 Docker Desktop 服务无权限启动。待引擎可用时运行该命令，再确认 `/healthz`、`/docs`、seed 和四个演示身份。
+
+## 推荐 Phase 2 顺序
 
 1. 初始化 Python 3.12/FastAPI 与 Next.js/TypeScript 工程、Makefile、Docker Compose、`.env.example` 和 CI 质量脚本。
 2. 建立 PostgreSQL/Redis、SQLAlchemy 模型、Alembic 初始迁移和开发环境 seed/reset 命令。
@@ -19,13 +33,4 @@
 5. 定义 provider ports 和 deterministic mock adapters，并生成合成演示数据。
 6. 为上述内容添加单元、集成、迁移、鉴权与种子测试，运行格式化、lint、type check、compose smoke test。
 
-## Phase 0 验证命令
-
-当前没有可执行代码或依赖。文档阶段可执行：
-
-```powershell
-git diff --check
-Get-ChildItem README.md, docs -Recurse -File
-```
-
-Phase 1 起，README 将替换为可执行的 `make format`、`make lint`、`make typecheck`、`make test`、`docker compose up`、seed 和 Playwright 命令。
+完整运行与验证命令见 [README](../README.md)。

@@ -9,6 +9,7 @@
 - 每个接口、工具参数和 provider 响应由 Pydantic schema 校验；设置速率限制、请求大小/附件类型限制与超时。
 - 客户输入、策略文本与检索证据一律标注为不可信。提示词将它们置于数据区，不把其中指令作为系统指令执行。
 - 审计日志不可变，包含 actor、动作、资源、reason code、trace ID、结果和时间，不记录私有链路推理。
+- 密码使用 PBKDF2-SHA256（每条记录独立随机 salt）保存；JWT 仅保存 subject、role 与到期时间。非 development 环境拒绝使用默认 JWT secret。
 
 ## 必测威胁
 

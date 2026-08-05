@@ -1,0 +1,51 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: commercecare
+      POSTGRES_USER: commercecare
+      POSTGRES_PASSWORD: commercecare
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U commercecare -d commercecare"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      COMMERCECARE_DATABASE_URL: postgresql+psycopg://commercecare:commercecare@db:5432/commercecare
+      COMMERCECARE_REDIS_URL: redis://redis:6379/0
+      COMMERCECARE_JWT_SECRET: ${COMMERCECARE_JWT_SECRET:-development-only-secret-change-me}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+  web:
+    build:
+      context: frontend
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres-data:
