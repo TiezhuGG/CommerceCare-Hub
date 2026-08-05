@@ -1,0 +1,13 @@
+.git
+.venv
+.pytest_cache
+.mypy_cache
+.ruff_cache
+__pycache__
+*.py[cod]
+*.db
+frontend/node_modules
+frontend/.next
+frontend/tsconfig.tsbuildinfo
+postgres-data
+redis-data

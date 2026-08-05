@@ -39,8 +39,8 @@ def test_mock_provider_returns_seeded_order_and_shipment(session: Session) -> No
     session.commit()
     provider = DeterministicMockCommerceProvider(session)
 
-    order = provider.get_order("CC-1005")
-    shipment = provider.get_shipment("CC-1005")
+    order = provider.get_order("CC-1001")
+    shipment = provider.get_shipment("CC-1001")
 
     assert order is not None
     assert order.status == "in_transit"

@@ -2,7 +2,7 @@
 
 CommerceCare Hub 是一个可本地运行的电商服务 AI Agent 系统，覆盖售前咨询、订单与物流查询，以及受控的售后处置。它面向面试演示，但以生产级的正确性、可审计性、可恢复性与安全边界为优先。
 
-当前仓库已完成 **Phase 1（基础设施）**：提供 FastAPI、Next.js、Alembic、JWT/RBAC、审计/幂等基础、deterministic mock provider 与合成演示数据。客户会话工作流和业务处置将在 Phase 2 起交付。
+当前仓库已完成 **Phase 2（首个垂直切片）**：除 Phase 1 基础设施外，Customer chat 已可处理本人订单的 `order_status` 与 `delivery_delay` 查询，并产出可审计工单、政策证据、状态迁移、trace 和 grounded reply。
 
 ## 核心原则
 
@@ -27,8 +27,8 @@ CommerceCare Hub 是一个可本地运行的电商服务 AI Agent 系统，覆�
 ## 阶段
 
 1. Phase 0：规格设计（完成）
-2. Phase 1：基础设施、认证、审计、迁移与 mock provider
-3. Phase 2：订单状态与物流延迟的端到端垂直切片
+2. Phase 1：基础设施、认证、审计、迁移与 mock provider（实现完成）
+3. Phase 2：订单状态与物流延迟的端到端垂直切片（实现完成）
 4. Phase 3：售后动作、审批、幂等与重试
 5. Phase 4：结构化 Agent、知识库、提示词注册表与 Coze 边界
 6. Phase 5：评估、故障注入、安全回归与指标

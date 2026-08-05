@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-**Phase 1 — 实现完成，Docker runtime 验证待复核（2026-07-30）**。已交付本地可运行的应用基础设施；本机 Docker Desktop 引擎未运行，因而未能完成 `docker compose up` 的最终 runtime 验证。
+**Phase 2 — 实现完成（2026-08-05）**。Docker Compose 已实际构建并启动 PostgreSQL、Redis、API 与 Web；真实 HTTP smoke test 已验证 seed、认证、Customer conversation、delivery-delay 政策证据、trace 和 Web 页面。
 
 ## 交付物
 
@@ -10,27 +10,29 @@
 - SQLAlchemy 2 模型、Alembic 初始迁移、PostgreSQL/Redis Compose 定义与 30/100/100/100 合成 seed/reset 工具。
 - JWT/PBKDF2 认证、RBAC、订单归属授权、trace ID、统一错误契约、audit log、idempotency record 和 outbox 基础。
 - 只读/写入 provider ports 与 deterministic mock adapters；7 个后端回归测试和前端编译检查。
+- Phase 2 Customer conversation/message APIs、deterministic Router、只读订单/物流/政策上下文、强类型 ticket state service、grounded reply、workflow trace 和最小 Customer chat/Agent workspace UI。
+- Docker build context isolation and lockfile-based dependency installation for reproducible API/Web images.
 
 ## 已执行的验证
 
 - `uv run ruff format --check backend/app backend/tests`
 - `uv run ruff check backend/app backend/tests`
 - `uv run mypy backend/app`
-- `uv run pytest`（7 passed）
+- `uv run pytest`（13 passed）
 - Alembic SQLite 临时库 `upgrade → seed → downgrade → upgrade`（通过）
 - `npm --prefix frontend run check` 与 `npm --prefix frontend run build`（通过）
 - `npm audit --omit=dev --audit-level=high`（0 vulnerabilities）
 - `docker compose --env-file .env.example config`（通过）
+- Phase 2 workflow、越权、缺失订单号、重复 client message ID 与非法状态迁移回归测试（通过）
+- Phase 2 前端 Customer chat / Agent workspace TypeScript 与 production build（通过）
 
-`docker compose up --build` 尚未通过：本机 `desktop-linux` Docker 引擎管道不存在，且 Docker Desktop 服务无权限启动。待引擎可用时运行该命令，再确认 `/healthz`、`/docs`、seed 和四个演示身份。
+`docker compose --env-file .env.example up --build --detach`（通过）。容器内 seed 后，`/healthz`、Customer JWT、conversation/message、delivery-delay policy evidence、workflow trace 与 `http://localhost:3000` 均已 HTTP smoke-tested。浏览器自动化仍待本地浏览器运行时可用后补充。
 
-## 推荐 Phase 2 顺序
+## 推荐 Phase 3 顺序
 
-1. 初始化 Python 3.12/FastAPI 与 Next.js/TypeScript 工程、Makefile、Docker Compose、`.env.example` 和 CI 质量脚本。
-2. 建立 PostgreSQL/Redis、SQLAlchemy 模型、Alembic 初始迁移和开发环境 seed/reset 命令。
-3. 实现 JWT 登录、RBAC、资源归属授权和统一错误契约。
-4. 实现 trace、audit log、workflow run、outbox 与幂等基础设施。
-5. 定义 provider ports 和 deterministic mock adapters，并生成合成演示数据。
-6. 为上述内容添加单元、集成、迁移、鉴权与种子测试，运行格式化、lint、type check、compose smoke test。
+1. 先为退款、退货、地址更新和错漏损件更新 policy、command schema、审批规则和失败验收测试。
+2. 实现带 actor、reason code、idempotency key、授权和 audit 的 Domain Service 写命令。
+3. 接入 approval queue、approval timeout、outbox dispatcher 和 provider retry/replay。
+4. 扩展 Customer/Operator UI，并完成重复退款、写后断连和审批超时端到端测试。
 
 完整运行与验证命令见 [README](../README.md)。

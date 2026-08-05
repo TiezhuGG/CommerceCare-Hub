@@ -18,9 +18,17 @@
 - [x] JWT、PBKDF2 密码散列、RBAC、资源归属检查、统一错误/trace 契约和脱敏审计基础可用。
 - [x] idempotency records、outbox events、完整 provider ports 与 deterministic mock adapters 已定义。
 - [x] 后端 lint、类型检查、7 个回归测试，及前端 TypeScript/production build 均通过。
-- [ ] Compose 实际启动待本机 Docker Desktop 引擎可用后复核；当前仅配置校验通过。
+- [x] Compose 已实际构建并启动，PostgreSQL/Redis 健康，API/Web HTTP smoke test 与合成 seed 通过。
 
-Phase 2：订单状态及物流延迟从 chat 到 grounded reply、工单、trace 和审计端到端通过，且未授权订单读取失败。
+### Phase 2
+
+- [x] Customer 可创建自己的会话并以幂等 `client_message_id` 发送消息；跨客户会话读取和发送必须被拒绝。
+- [x] Deterministic Router 必须仅从不可信消息中抽取订单号，并为 `order_status` 或 `delivery_delay` 输出结构化结果；未识别订单号安全转入 `NEED_MORE_INFO`。
+- [x] Context 层只能通过 read-only mock provider 读取订单与物流，并为每个事实记录来源和观测时间。
+- [x] delivery-delay 场景必须检索当前有效的版本化政策证据，生成不含内部评分的 grounded customer reply。
+- [x] Ticket 状态只能经 allow-list Domain Service 从 `NEW` 转换，所有转换、agent run、tool call、evidence 和最终结果均可按 trace 查询。
+- [x] API integration、workflow、越权、缺失订单号、物流延迟和状态迁移失败路径都有回归测试。
+- [ ] 最小 chat/operator UI 的浏览器自动化待可用浏览器运行时执行；Compose runtime smoke test 已通过。
 
 Phase 3：退款、退货、地址变更、损坏商品遵循审批和幂等；重复退款、审批超时和写后断线被安全处理。
 

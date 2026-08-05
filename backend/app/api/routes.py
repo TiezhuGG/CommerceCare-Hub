@@ -9,18 +9,40 @@ from app.core.config import get_settings
 from app.core.enums import Role
 from app.core.errors import AuthorizationError
 from app.core.security import create_access_token, verify_password
-from app.models import AuditLog, Order, Shipment, User
+from app.models import (
+    AgentRun,
+    AuditLog,
+    Conversation,
+    Message,
+    Order,
+    RetrievalEvidence,
+    Shipment,
+    Ticket,
+    TicketEvent,
+    ToolCall,
+    User,
+    WorkflowRun,
+)
 from app.schemas import (
     AuditLogResponse,
+    ConversationDetailResponse,
+    ConversationResponse,
     CurrentUserResponse,
     LoginRequest,
+    MessageResponse,
     OrderResponse,
     SeedResponse,
+    SendMessageRequest,
+    SendMessageResponse,
+    TicketSummaryResponse,
     TokenResponse,
+    WorkflowTraceResponse,
 )
 from app.services.audit import record_audit
-from app.services.authorization import ensure_order_access
+from app.services.authorization import ensure_conversation_access, ensure_order_access
 from app.services.idempotency import execute_idempotent
+from app.services.order_status_workflow import OrderStatusWorkflowService
+from app.services.redaction import redact_customer_message
 from app.services.seed import reset_demo_data, seed_demo_data
 
 router = APIRouter(prefix="/api/v1")
@@ -43,6 +65,213 @@ def login(payload: LoginRequest, session: SessionDep) -> TokenResponse:
 @router.get("/me", response_model=CurrentUserResponse)
 def current_user(current_user: CurrentUserDep) -> CurrentUserResponse:
     return CurrentUserResponse.model_validate(current_user)
+
+
+@router.post("/conversations", response_model=ConversationResponse)
+def create_conversation(
+    request: Request,
+    session: SessionDep,
+    current_user: CurrentUserDep,
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> ConversationResponse:
+    if current_user.role is not Role.CUSTOMER or current_user.customer_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only customer identities can create customer conversations",
+        )
+    trace_id = uuid.UUID(request.state.trace_id)
+
+    def command() -> dict[str, object]:
+        conversation = Conversation(customer_id=current_user.customer_id)
+        session.add(conversation)
+        session.flush()
+        record_audit(
+            session,
+            event_type="CONVERSATION_CREATED",
+            resource_type="conversation",
+            resource_id=str(conversation.id),
+            actor_id=current_user.id,
+            trace_id=trace_id,
+        )
+        return {
+            "id": str(conversation.id),
+            "customer_id": str(conversation.customer_id),
+            "status": conversation.status,
+            "created_at": conversation.created_at.isoformat(),
+        }
+
+    result = execute_idempotent(
+        session,
+        action_type="create_conversation",
+        target_resource_id=str(current_user.customer_id),
+        idempotency_key=idempotency_key,
+        action=command,
+    )
+    session.commit()
+    return ConversationResponse.model_validate(result)
+
+
+@router.post("/conversations/{conversation_id}/messages", response_model=SendMessageResponse)
+def send_message(
+    conversation_id: uuid.UUID,
+    payload: SendMessageRequest,
+    session: SessionDep,
+    current_user: CurrentUserDep,
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> SendMessageResponse:
+    conversation = session.get(Conversation, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    try:
+        ensure_conversation_access(current_user, conversation)
+    except AuthorizationError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error.message) from error
+    if current_user.role is not Role.CUSTOMER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only customer messages can trigger the Phase 2 workflow",
+        )
+
+    def command() -> dict[str, object]:
+        duplicate = session.scalar(
+            select(Message).where(
+                Message.conversation_id == conversation.id,
+                Message.client_message_id == payload.client_message_id,
+            )
+        )
+        if duplicate is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="client_message_id has already been used for this conversation",
+            )
+        session.add(
+            Message(
+                conversation_id=conversation.id,
+                sender_type="customer",
+                client_message_id=payload.client_message_id,
+                body_redacted=redact_customer_message(payload.message),
+            )
+        )
+        workflow = OrderStatusWorkflowService().run(
+            session,
+            conversation=conversation,
+            customer_actor_id=current_user.id,
+            customer_message=payload.message,
+        )
+        record_audit(
+            session,
+            event_type="CUSTOMER_MESSAGE_PROCESSED",
+            resource_type="conversation",
+            resource_id=str(conversation.id),
+            actor_id=current_user.id,
+            trace_id=workflow.trace_id,
+            payload_redacted={"client_message_id": payload.client_message_id},
+        )
+        return workflow.model_dump(mode="json")
+
+    result = execute_idempotent(
+        session,
+        action_type="send_customer_message",
+        target_resource_id=str(conversation.id),
+        idempotency_key=idempotency_key,
+        action=command,
+    )
+    session.commit()
+    return SendMessageResponse.model_validate(result)
+
+
+@router.get("/conversations/{conversation_id}", response_model=ConversationDetailResponse)
+def get_conversation(
+    conversation_id: uuid.UUID, session: SessionDep, current_user: CurrentUserDep
+) -> ConversationDetailResponse:
+    conversation = session.get(Conversation, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    try:
+        ensure_conversation_access(current_user, conversation)
+    except AuthorizationError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error.message) from error
+    messages = session.scalars(
+        select(Message)
+        .where(Message.conversation_id == conversation.id)
+        .order_by(Message.created_at)
+    ).all()
+    ticket = session.scalar(
+        select(Ticket)
+        .where(Ticket.conversation_id == conversation.id)
+        .order_by(Ticket.created_at.desc())
+    )
+    return ConversationDetailResponse(
+        id=conversation.id,
+        customer_id=conversation.customer_id,
+        status=conversation.status,
+        created_at=conversation.created_at,
+        messages=[MessageResponse.model_validate(message) for message in messages],
+        ticket_state=ticket.state if ticket else None,
+        trace_id=ticket.trace_id if ticket else None,
+    )
+
+
+@router.get("/tickets", response_model=list[TicketSummaryResponse])
+def list_tickets(
+    session: SessionDep,
+    _: Annotated[User, Depends(require_roles(Role.AGENT_OPERATOR, Role.SUPERVISOR, Role.ADMIN))],
+) -> list[TicketSummaryResponse]:
+    tickets = session.scalars(select(Ticket).order_by(Ticket.created_at.desc()).limit(100)).all()
+    return [TicketSummaryResponse.model_validate(ticket) for ticket in tickets]
+
+
+@router.get("/workflow-runs/{trace_id}", response_model=WorkflowTraceResponse)
+def get_workflow_trace(
+    trace_id: uuid.UUID, session: SessionDep, current_user: CurrentUserDep
+) -> WorkflowTraceResponse:
+    workflow = session.scalar(select(WorkflowRun).where(WorkflowRun.trace_id == trace_id))
+    if workflow is None or workflow.ticket_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workflow trace not found"
+        )
+    ticket = session.get(Ticket, workflow.ticket_id)
+    if ticket is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workflow ticket not found"
+        )
+    conversation = session.get(Conversation, ticket.conversation_id)
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Workflow conversation not found"
+        )
+    try:
+        ensure_conversation_access(current_user, conversation)
+    except AuthorizationError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error.message) from error
+    agents = session.scalars(
+        select(AgentRun.agent_name).where(AgentRun.workflow_run_id == workflow.id)
+    ).all()
+    tools = session.scalars(
+        select(ToolCall.tool_name).where(ToolCall.workflow_run_id == workflow.id)
+    ).all()
+    evidence = session.scalars(
+        select(RetrievalEvidence).where(RetrievalEvidence.workflow_run_id == workflow.id)
+    ).all()
+    events = session.scalars(
+        select(TicketEvent)
+        .where(TicketEvent.ticket_id == ticket.id)
+        .order_by(TicketEvent.created_at)
+    ).all()
+    return WorkflowTraceResponse(
+        trace_id=workflow.trace_id,
+        status=workflow.status,
+        ticket_id=workflow.ticket_id,
+        final_result_code=workflow.final_result_code,
+        agents=list(agents),
+        tools=list(tools),
+        evidence=[f"{item.document_id}@{item.document_version}" for item in evidence],
+        state_transitions=[
+            f"{item.from_state.value if item.from_state else 'none'}->"
+            f"{item.to_state.value if item.to_state else 'none'}"
+            for item in events
+        ],
+    )
 
 
 @router.get("/orders/{order_number}", response_model=OrderResponse)

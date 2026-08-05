@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.enums import Role
+from app.core.enums import Role, TicketState, WorkflowStatus
 
 
 class LoginRequest(BaseModel):
@@ -55,3 +55,61 @@ class ErrorResponse(BaseModel):
     message: str
     trace_id: str
     details: dict[str, object] | None = None
+
+
+class ConversationResponse(BaseModel):
+    id: uuid.UUID
+    customer_id: uuid.UUID
+    status: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SendMessageRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=2_000)
+    client_message_id: str = Field(min_length=1, max_length=64)
+
+
+class SendMessageResponse(BaseModel):
+    conversation_id: uuid.UUID
+    ticket_id: uuid.UUID
+    trace_id: uuid.UUID
+    workflow_status: WorkflowStatus
+    customer_reply: str
+
+
+class MessageResponse(BaseModel):
+    id: uuid.UUID
+    sender_type: str
+    body_redacted: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ConversationDetailResponse(ConversationResponse):
+    messages: list[MessageResponse]
+    ticket_state: TicketState | None
+    trace_id: uuid.UUID | None
+
+
+class WorkflowTraceResponse(BaseModel):
+    trace_id: uuid.UUID
+    status: WorkflowStatus
+    ticket_id: uuid.UUID | None
+    final_result_code: str | None
+    agents: list[str]
+    tools: list[str]
+    evidence: list[str]
+    state_transitions: list[str]
+
+
+class TicketSummaryResponse(BaseModel):
+    id: uuid.UUID
+    state: TicketState
+    reason_code: str
+    trace_id: uuid.UUID
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

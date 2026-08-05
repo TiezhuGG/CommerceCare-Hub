@@ -26,6 +26,12 @@ API 前缀为 `/api/v1`，使用 JSON、OpenAPI、OAuth2/JWT（Phase 1）和统�
 
 `POST /conversations/{id}/messages`：`{message, client_message_id, attachments?}`。消息体限制、附件元数据与客户归属均在 API 层校验；返回 `{conversation_id, ticket_id, trace_id, workflow_status, customer_reply?}`。
 
+### Phase 2 request contract
+
+`POST /conversations` 由 Customer 创建自己的会话，返回 `conversation_id`。`POST /conversations/{id}/messages` 必须带 `Idempotency-Key`，且 `client_message_id` 在会话内唯一。当前只接受纯文本、最大 2,000 字符；附件留待后续阶段。消息触发 order-status/delivery-delay 确定性工作流，返回 ticket、trace 和客户可见回复。
+
+`GET /conversations/{id}`、`GET /workflow-runs/{trace_id}` 和订单事实均执行 Customer 归属或 staff RBAC 检查。Phase 2 不提供退款、地址或承运商写操作。
+
 `POST /approvals/{id}/decision`：`{decision: APPROVE|REJECT, reason_code, comment?}`。决策必须由当前有权限的 Supervisor 作出，过期或已决请求返回 `APPROVAL_NOT_ACTIONABLE`。
 
 `GET /workflow-runs/{trace_id}` 不返回私有推理、提示词全文或未脱敏 PII；只返回 agent/工具/证据/状态迁移的结构化摘要。

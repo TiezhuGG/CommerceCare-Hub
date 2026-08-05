@@ -116,10 +116,12 @@ class Conversation(Base):
 
 class Message(Base):
     __tablename__ = "messages"
+    __table_args__ = (UniqueConstraint("conversation_id", "client_message_id"),)
 
     id: Mapped[uuid.UUID] = uuid_pk()
     conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversations.id"), index=True)
     sender_type: Mapped[str] = mapped_column(String(32))
+    client_message_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     body_redacted: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = created_at()
 

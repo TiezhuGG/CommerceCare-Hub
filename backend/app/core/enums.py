@@ -35,3 +35,9 @@ class ApprovalStatus(StrEnum):
     APPROVED = "approved"
     REJECTED = "rejected"
     EXPIRED = "expired"
+
+
+class Intent(StrEnum):
+    ORDER_STATUS = "order_status"
+    DELIVERY_DELAY = "delivery_delay"
+    UNKNOWN = "unknown"

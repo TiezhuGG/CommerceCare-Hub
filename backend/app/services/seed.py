@@ -70,7 +70,7 @@ def seed_demo_data(session: Session) -> dict[str, object]:
         order = Order(
             order_number=f"CC-{1000 + index}",
             customer_id=customer.id,
-            status="delivered" if index % 5 else "in_transit",
+            status="in_transit" if index % 5 == 1 else "delivered",
             ordered_at=now - timedelta(days=index),
         )
         session.add(order)
@@ -87,8 +87,8 @@ def seed_demo_data(session: Session) -> dict[str, object]:
             Shipment(
                 order_id=order.id,
                 tracking_number=f"TRACK-{index:04d}",
-                status="delivered" if index % 5 else "delayed",
-                eta_at=now + timedelta(days=2) if index % 5 == 0 else None,
+                status="delayed" if index % 5 == 1 else "delivered",
+                eta_at=now + timedelta(days=2) if index % 5 == 1 else None,
             )
         )
 
