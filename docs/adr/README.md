@@ -1,5 +1,7 @@
 # Architecture Decision Records
 
+- [ADR-0006: Phase 3 after-sales action boundary and conservative approvals](0006-phase3-after-sales-actions.md)
+
 - [ADR-0001: Agent、工作流与领域写入边界](0001-agent-workflow-domain-boundaries.md)
 - [ADR-0002: Provider 接口与 deterministic mock](0002-provider-ports-and-mock.md)
 - [ADR-0003: 显式工作流状态机](0003-explicit-workflow-state-machine.md)

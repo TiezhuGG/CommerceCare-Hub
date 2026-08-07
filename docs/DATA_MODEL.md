@@ -23,13 +23,16 @@
 | agent_runs | `id`, `workflow_run_id`, `agent_name`, `prompt_key`, `prompt_version`, `input_summary`, `output_summary`, `latency_ms`, `token_usage` |
 | retrieval_evidence | `id`, `workflow_run_id`, `document_id`, `document_version`, `matched_section`, `relevance_score`, `observed_at` |
 | tool_calls | `id`, `workflow_run_id`, `tool_name`, `request_summary`, `result_summary`, `idempotency_key`, `status` |
-| approval_requests | `id`, `ticket_id`, `action_type`, `status`, `expires_at`, `decided_by` |
+| approval_requests | `id`, `ticket_id`, `action_id`, `action_type`, `status`, `expires_at`, `decided_by` |
+| service_actions | `id`, `ticket_id`, `workflow_run_id`, `order_id`, `action_type`, `status`, `reason_code`, `idempotency_key`, redacted payload、provider reference 与 failure code；动作/订单/幂等键联合唯一 |
 | policy_documents | `id`, `document_key`, `version`, `effective_from`, `effective_to`, `scope`, `body`, unique(`document_key`,`version`) |
 | prompt_versions | `id`, `prompt_key`, `version`, `template`, `active`, unique(`prompt_key`,`version`) |
 | eval_cases | `id`, `category`, `input`, `expected_result`, `active` |
 | audit_logs | `id`, `trace_id`, `actor_id`, `event_type`, `resource_type`, `resource_id`, `payload_redacted`, `occurred_at` |
 | idempotency_records | `action_type`, `target_resource_id`, `idempotency_key` 联合唯一；保存首次响应以安全重放 |
-| outbox_events | `event_type`, aggregate 引用、payload、`published_at`；与领域写入同事务创建 |
+| outbox_events | `event_type`, aggregate 引用、payload、`attempts`、`last_error_code`、`published_at`；与领域写入同事务创建 |
+
+Phase 3 的地址动作仅持久化受控 address reference 的不可逆 fingerprint；明文地址不进入数据库、审计日志或 mock provider。
 
 ## 3. 幂等与一致性
 

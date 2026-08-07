@@ -1,5 +1,21 @@
 # Implementation Status
 
+## Current status
+
+**Phase 3 — complete (2026-08-05).** The local application now supports customer-initiated refunds, returns, address updates, and damaged-item reports. Refunds and address updates wait for a Supervisor decision; low-risk actions dispatch through the durable outbox to the deterministic mock provider. Every mutation is idempotent and auditable.
+
+### Phase 3 delivered
+
+- `AfterSalesActionService` owns policy validation, ticket transitions, workflow records, approval creation, audit records, and outbox enqueueing.
+- Durable `service_actions` and approval links are migrated with `f3a7c1d9e2b4`; outbox events retain attempt count and failure code.
+- The dispatcher retries provider timeouts up to three attempts, never repeats a successful write, and marks the ticket/workflow failed when retries are exhausted.
+- Customer UI can submit the four action types; Supervisor UI can load and decide pending approvals.
+- Backend regression suite: 21 passed. Frontend TypeScript check and production build passed. SQLite migration upgrade/downgrade/upgrade and Docker Compose HTTP smoke test passed.
+
+### Remaining known gap
+
+- Browser-driven Playwright coverage remains pending because the local browser automation runtime previously could not initialize its kernel assets. API, Docker, and frontend production-build validation are complete.
+
 ## 当前状态
 
 **Phase 2 — 实现完成（2026-08-05）**。Docker Compose 已实际构建并启动 PostgreSQL、Redis、API 与 Web；真实 HTTP smoke test 已验证 seed、认证、Customer conversation、delivery-delay 政策证据、trace 和 Web 页面。

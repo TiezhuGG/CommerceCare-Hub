@@ -4,47 +4,74 @@ import { useState } from "react";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
-type Ticket = { id: string; state: string; reason_code: string; trace_id: string };
+type Approval = { id: string; action_id: string; status: string; action_status: string };
 
 export default function WorkspacePage() {
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [approvals, setApprovals] = useState<Approval[]>([]);
+  const [token, setToken] = useState("");
   const [error, setError] = useState("");
 
-  async function loadTickets() {
+  async function loadApprovals() {
     setError("");
     const login = await fetch(`${apiBaseUrl}/auth/token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "operator@demo.local", password: "demo-password-change-me" }),
+      body: JSON.stringify({ email: "supervisor@demo.local", password: "demo-password-change-me" }),
     });
     if (!login.ok) {
-      setError("无法登录 Operator 演示账号。");
+      setError("无法登录 Supervisor 演示账号。");
       return;
     }
-    const { access_token: token } = (await login.json()) as { access_token: string };
-    const response = await fetch(`${apiBaseUrl}/tickets`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const { access_token: accessToken } = (await login.json()) as { access_token: string };
+    setToken(accessToken);
+    const response = await fetch(`${apiBaseUrl}/approvals`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!response.ok) {
-      setError("无法读取工单列表。");
+      setError("无法读取审批队列。");
       return;
     }
-    setTickets((await response.json()) as Ticket[]);
+    setApprovals((await response.json()) as Approval[]);
+  }
+
+  async function decide(approvalId: string, decision: "approve" | "reject") {
+    const response = await fetch(`${apiBaseUrl}/approvals/${approvalId}/decision`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "Idempotency-Key": crypto.randomUUID(),
+      },
+      body: JSON.stringify({ decision, reason_code: "SUPERVISOR_REVIEW" }),
+    });
+    if (!response.ok) {
+      setError("该审批已过期或不可处理。");
+      return;
+    }
+    await loadApprovals();
   }
 
   return (
     <main>
-      <h1>Agent workspace</h1>
-      <button onClick={loadTickets}>加载近期工单</button>
+      <h1>Supervisor approval queue</h1>
+      <p>仅展示必要的审批状态；客户敏感地址只以引用指纹保存，不会在队列中展示。</p>
+      <button onClick={loadApprovals}>加载审批队列</button>
       {error ? <p role="alert">{error}</p> : null}
       <ul>
-        {tickets.map((ticket) => (
-          <li key={ticket.id}>
-            {ticket.state} · {ticket.reason_code} · {ticket.trace_id}
+        {approvals.map((approval) => (
+          <li key={approval.id}>
+            <p>审批：{approval.status}；动作：{approval.action_status}</p>
+            {approval.status === "pending" ? (
+              <>
+                <button onClick={() => decide(approval.id, "approve")}>批准</button>
+                <button onClick={() => decide(approval.id, "reject")}>拒绝</button>
+              </>
+            ) : null}
           </li>
         ))}
       </ul>
-      <a href="/">返回 Customer chat</a>
+      <p>管理员可调用 outbox dispatch，将已批准动作派发至 mock provider。</p>
+      <a href="/">返回 Customer 售后页</a>
     </main>
   );
 }

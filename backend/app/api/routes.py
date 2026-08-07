@@ -6,16 +6,18 @@ from sqlalchemy import select
 
 from app.api.deps import CurrentUserDep, SessionDep, require_idempotency_key, require_roles
 from app.core.config import get_settings
-from app.core.enums import Role
-from app.core.errors import AuthorizationError
+from app.core.enums import ActionStatus, Role
+from app.core.errors import ApprovalNotActionableError, AuthorizationError
 from app.core.security import create_access_token, verify_password
 from app.models import (
     AgentRun,
+    ApprovalRequest,
     AuditLog,
     Conversation,
     Message,
     Order,
     RetrievalEvidence,
+    ServiceAction,
     Shipment,
     Ticket,
     TicketEvent,
@@ -24,10 +26,15 @@ from app.models import (
     WorkflowRun,
 )
 from app.schemas import (
+    ActionRequest,
+    ActionResponse,
+    ApprovalDecisionRequest,
+    ApprovalResponse,
     AuditLogResponse,
     ConversationDetailResponse,
     ConversationResponse,
     CurrentUserResponse,
+    DispatchResponse,
     LoginRequest,
     MessageResponse,
     OrderResponse,
@@ -38,10 +45,12 @@ from app.schemas import (
     TokenResponse,
     WorkflowTraceResponse,
 )
+from app.services.actions import AfterSalesActionService
 from app.services.audit import record_audit
 from app.services.authorization import ensure_conversation_access, ensure_order_access
 from app.services.idempotency import execute_idempotent
 from app.services.order_status_workflow import OrderStatusWorkflowService
+from app.services.outbox import OutboxDispatcher
 from app.services.redaction import redact_customer_message
 from app.services.seed import reset_demo_data, seed_demo_data
 
@@ -212,6 +221,195 @@ def get_conversation(
     )
 
 
+@router.post("/conversations/{conversation_id}/actions", response_model=ActionResponse)
+def create_after_sales_action(
+    conversation_id: uuid.UUID,
+    payload: ActionRequest,
+    session: SessionDep,
+    current_user: CurrentUserDep,
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> ActionResponse:
+    if current_user.role is not Role.CUSTOMER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only customer identities can create after-sales actions",
+        )
+    conversation = session.get(Conversation, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    try:
+        ensure_conversation_access(current_user, conversation)
+    except AuthorizationError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error.message) from error
+    order = session.scalar(select(Order).where(Order.order_number == payload.order_number))
+    if order is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+    try:
+        ensure_order_access(current_user, order)
+    except AuthorizationError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error.message) from error
+
+    def response_for(action: ServiceAction) -> ActionResponse:
+        approval = session.scalar(
+            select(ApprovalRequest).where(ApprovalRequest.action_id == action.id)
+        )
+        if action.status is ActionStatus.QUEUED:
+            OutboxDispatcher().dispatch(session)
+            session.commit()
+            session.refresh(action)
+        ticket = session.get(Ticket, action.ticket_id)
+        if ticket is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Action ticket was not persisted",
+            )
+        return ActionResponse(
+            action_id=action.id,
+            ticket_id=action.ticket_id,
+            trace_id=ticket.trace_id,
+            status=action.status,
+            approval_id=approval.id if approval else None,
+        )
+
+    existing_action = session.scalar(
+        select(ServiceAction).where(
+            ServiceAction.action_type == payload.action_type,
+            ServiceAction.order_id == order.id,
+            ServiceAction.idempotency_key == idempotency_key,
+        )
+    )
+    if existing_action is not None:
+        return response_for(existing_action)
+
+    def command() -> dict[str, object]:
+        created = AfterSalesActionService().create(
+            session,
+            conversation=conversation,
+            actor_id=current_user.id,
+            order=order,
+            command=payload,
+            idempotency_key=idempotency_key,
+        )
+        return {
+            "action_id": str(created.action.id),
+            "approval_id": str(created.approval.id) if created.approval else None,
+        }
+
+    result = execute_idempotent(
+        session,
+        action_type="create_after_sales_action",
+        target_resource_id=str(conversation.id),
+        idempotency_key=idempotency_key,
+        action=command,
+    )
+    session.commit()
+    action = session.get(ServiceAction, uuid.UUID(str(result["action_id"])))
+    if action is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Action was not persisted"
+        )
+    return response_for(action)
+
+
+@router.get("/approvals", response_model=list[ApprovalResponse])
+def list_approvals(
+    session: SessionDep,
+    _: Annotated[User, Depends(require_roles(Role.SUPERVISOR, Role.ADMIN))],
+) -> list[ApprovalResponse]:
+    approvals = session.scalars(
+        select(ApprovalRequest).order_by(ApprovalRequest.expires_at).limit(100)
+    ).all()
+    responses: list[ApprovalResponse] = []
+    for approval in approvals:
+        action = session.get(ServiceAction, approval.action_id)
+        if action is not None:
+            responses.append(
+                ApprovalResponse(
+                    id=approval.id,
+                    action_id=approval.action_id,
+                    status=approval.status,
+                    action_status=action.status,
+                )
+            )
+    return responses
+
+
+@router.post("/approvals/{approval_id}/decision", response_model=ApprovalResponse)
+def decide_approval(
+    approval_id: uuid.UUID,
+    payload: ApprovalDecisionRequest,
+    session: SessionDep,
+    supervisor: Annotated[User, Depends(require_roles(Role.SUPERVISOR))],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> ApprovalResponse:
+    approval = session.get(ApprovalRequest, approval_id)
+    if approval is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Approval not found")
+
+    def command() -> dict[str, object]:
+        action = AfterSalesActionService().decide(
+            session,
+            approval=approval,
+            supervisor_id=supervisor.id,
+            decision=payload.decision,
+            reason_code=payload.reason_code,
+        )
+        return {"action_id": str(action.id)}
+
+    try:
+        result = execute_idempotent(
+            session,
+            action_type="decide_approval",
+            target_resource_id=str(approval.id),
+            idempotency_key=idempotency_key,
+            action=command,
+        )
+    except ApprovalNotActionableError:
+        session.commit()
+        raise
+    session.commit()
+    action = session.get(ServiceAction, uuid.UUID(str(result["action_id"])))
+    if action is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Action was not persisted"
+        )
+    return ApprovalResponse(
+        id=approval.id,
+        action_id=approval.action_id,
+        status=approval.status,
+        action_status=action.status,
+    )
+
+
+@router.post("/admin/outbox/dispatch", response_model=DispatchResponse)
+def dispatch_outbox(
+    session: SessionDep,
+    _: Annotated[User, Depends(require_roles(Role.ADMIN))],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> DispatchResponse:
+    def command() -> dict[str, int]:
+        AfterSalesActionService().expire_pending(session)
+        result = OutboxDispatcher().dispatch(session)
+        record_audit(
+            session,
+            event_type="OUTBOX_DISPATCH_REQUESTED",
+            resource_type="outbox",
+            resource_id=idempotency_key,
+            payload_redacted=result.model_dump(),
+        )
+        return result.model_dump()
+
+    result = execute_idempotent(
+        session,
+        action_type="dispatch_outbox",
+        target_resource_id="service_action_outbox",
+        idempotency_key=idempotency_key,
+        action=command,
+    )
+    session.commit()
+    return DispatchResponse.model_validate(result)
+
+
 @router.get("/tickets", response_model=list[TicketSummaryResponse])
 def list_tickets(
     session: SessionDep,
@@ -350,7 +548,9 @@ def reset_demo(
         )
 
     def command() -> dict[str, object]:
-        return reset_demo_data(session)
+        reset_demo_data(session)
+        # Re-seed in the same transaction so the authenticated administrator is never locked out.
+        return seed_demo_data(session)
 
     result = execute_idempotent(
         session,

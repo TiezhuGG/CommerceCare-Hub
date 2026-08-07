@@ -17,7 +17,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from app.core.database import Base
-from app.core.enums import ApprovalStatus, Role, TicketState, WorkflowStatus
+from app.core.enums import (
+    ActionStatus,
+    ActionType,
+    ApprovalStatus,
+    Role,
+    TicketState,
+    WorkflowStatus,
+)
 
 
 def uuid_pk() -> Mapped[uuid.UUID]:
@@ -209,10 +216,32 @@ class ApprovalRequest(Base):
 
     id: Mapped[uuid.UUID] = uuid_pk()
     ticket_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tickets.id"))
+    action_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("service_actions.id"), unique=True
+    )
     action_type: Mapped[str] = mapped_column(String(64))
     status: Mapped[ApprovalStatus] = mapped_column(Enum(ApprovalStatus, native_enum=False))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     decided_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+class ServiceAction(Base):
+    __tablename__ = "service_actions"
+    __table_args__ = (UniqueConstraint("action_type", "order_id", "idempotency_key"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    ticket_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tickets.id"), unique=True)
+    workflow_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workflow_runs.id"), unique=True)
+    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"), index=True)
+    requested_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    action_type: Mapped[ActionType] = mapped_column(Enum(ActionType, native_enum=False))
+    status: Mapped[ActionStatus] = mapped_column(Enum(ActionStatus, native_enum=False))
+    reason_code: Mapped[str] = mapped_column(String(64))
+    idempotency_key: Mapped[str] = mapped_column(String(128))
+    payload_redacted: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    external_reference: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    failure_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = created_at()
 
 
 class PolicyDocument(Base):
@@ -282,5 +311,7 @@ class OutboxEvent(Base):
     aggregate_type: Mapped[str] = mapped_column(String(64))
     aggregate_id: Mapped[str] = mapped_column(String(64))
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = created_at()

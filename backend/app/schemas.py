@@ -3,7 +3,15 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.enums import Role, TicketState, WorkflowStatus
+from app.core.enums import (
+    ActionStatus,
+    ActionType,
+    ApprovalDecision,
+    ApprovalStatus,
+    Role,
+    TicketState,
+    WorkflowStatus,
+)
 
 
 class LoginRequest(BaseModel):
@@ -113,3 +121,39 @@ class TicketSummaryResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ActionRequest(BaseModel):
+    action_type: ActionType
+    order_number: str = Field(pattern=r"^CC-\d{4,}$", max_length=64)
+    reason_code: str = Field(pattern=r"^[A-Z0-9_]{3,64}$")
+    amount_minor: int | None = Field(default=None, gt=0)
+    address_reference: str | None = Field(default=None, min_length=3, max_length=128)
+    simulate_timeout: bool = False
+
+
+class ActionResponse(BaseModel):
+    action_id: uuid.UUID
+    ticket_id: uuid.UUID
+    trace_id: uuid.UUID
+    status: ActionStatus
+    approval_id: uuid.UUID | None
+
+
+class ApprovalDecisionRequest(BaseModel):
+    decision: ApprovalDecision
+    reason_code: str = Field(pattern=r"^[A-Z0-9_]{3,64}$")
+    comment: str | None = Field(default=None, max_length=500)
+
+
+class ApprovalResponse(BaseModel):
+    id: uuid.UUID
+    action_id: uuid.UUID | None
+    status: ApprovalStatus
+    action_status: ActionStatus
+
+
+class DispatchResponse(BaseModel):
+    dispatched: int
+    retried: int
+    failed: int

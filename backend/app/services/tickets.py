@@ -20,6 +20,7 @@ ALLOWED_TRANSITIONS: dict[TicketState, set[TicketState]] = {
     TicketState.SOLUTION_PROPOSED: {
         TicketState.RESOLVED,
         TicketState.PENDING_APPROVAL,
+        TicketState.EXECUTING,
         TicketState.ESCALATED,
     },
     TicketState.PENDING_APPROVAL: {TicketState.EXECUTING, TicketState.ESCALATED},

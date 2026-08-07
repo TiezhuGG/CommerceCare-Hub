@@ -1,5 +1,9 @@
 # Product Requirements Document
 
+## Phase 3 after-sales policy decision
+
+The interview-demo implementation uses a deliberately conservative approval rule: every refund and address update requires Supervisor approval, regardless of amount. Returns are accepted only for delivered orders, and damaged-item reports are automatically queued as a reversible carrier inquiry. This narrower policy is intentional until Phase 4 policy evaluation and confidence/risk signals are available; the action domain service, rather than an LLM or HTTP handler, enforces it.
+
 ## 1. 目标与边界
 
 CommerceCare Hub 为电商客户提供售前、售后和工单协同服务。它不是 FAQ 聊天机器人：每一项可改变外部或业务状态的建议都必须经过确定性业务规则、授权和审计。

@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.errors import ProviderTimeoutError
 from app.models import Customer, Order, PolicyDocument, Product, Shipment, Sku
 from app.providers.contracts import (
     CommerceReadPort,
@@ -101,6 +102,8 @@ class DeterministicMockWriteProvider(CommerceWritePort):
 
     @staticmethod
     def _result(action: str, command: WriteCommand) -> WriteResult:
+        if command.simulate_timeout:
+            raise ProviderTimeoutError(f"Mock provider timed out while executing {action}")
         return WriteResult(
             action=action,
             status="accepted",

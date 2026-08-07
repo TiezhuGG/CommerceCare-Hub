@@ -18,3 +18,15 @@ class AuthorizationError(DomainError):
 
 class IdempotencyConflictError(DomainError):
     code = "IDEMPOTENCY_CONFLICT"
+
+
+class ApprovalNotActionableError(DomainError):
+    code = "APPROVAL_NOT_ACTIONABLE"
+
+
+class PolicyViolationError(DomainError):
+    code = "POLICY_VIOLATION"
+
+
+class ProviderTimeoutError(DomainError):
+    code = "PROVIDER_TIMEOUT"

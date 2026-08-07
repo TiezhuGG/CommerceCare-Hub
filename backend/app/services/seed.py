@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.enums import Role
 from app.core.security import hash_password
 from app.models import (
+    AgentRun,
     ApprovalRequest,
     AuditLog,
     Conversation,
@@ -20,6 +21,8 @@ from app.models import (
     PolicyDocument,
     Product,
     PromptVersion,
+    RetrievalEvidence,
+    ServiceAction,
     Shipment,
     Sku,
     Ticket,
@@ -70,7 +73,7 @@ def seed_demo_data(session: Session) -> dict[str, object]:
         order = Order(
             order_number=f"CC-{1000 + index}",
             customer_id=customer.id,
-            status="in_transit" if index % 5 == 1 else "delivered",
+            status="in_transit" if index == 1 else "delivered",
             ordered_at=now - timedelta(days=index),
         )
         session.add(order)
@@ -87,8 +90,8 @@ def seed_demo_data(session: Session) -> dict[str, object]:
             Shipment(
                 order_id=order.id,
                 tracking_number=f"TRACK-{index:04d}",
-                status="delayed" if index % 5 == 1 else "delivered",
-                eta_at=now + timedelta(days=2) if index % 5 == 1 else None,
+                status="delayed" if index == 1 else "delivered",
+                eta_at=now + timedelta(days=2) if index == 1 else None,
             )
         )
 
@@ -101,6 +104,41 @@ def seed_demo_data(session: Session) -> dict[str, object]:
                 effective_to=None,
                 scope={"region": "CN"},
                 body="Current synthetic delivery-delay policy.",
+            ),
+            PolicyDocument(
+                document_key="refunds",
+                version="2026.1",
+                effective_from=now - timedelta(days=1),
+                effective_to=None,
+                scope={"region": "CN"},
+                body="Current synthetic refund policy: supervisor approval is required.",
+            ),
+            PolicyDocument(
+                document_key="returns",
+                version="2026.1",
+                effective_from=now - timedelta(days=1),
+                effective_to=None,
+                scope={"region": "CN"},
+                body="Current synthetic return policy: delivered orders may be returned.",
+            ),
+            PolicyDocument(
+                document_key="address-changes",
+                version="2026.1",
+                effective_from=now - timedelta(days=1),
+                effective_to=None,
+                scope={"region": "CN"},
+                body="Current synthetic address-change policy: supervisor approval is required.",
+            ),
+            PolicyDocument(
+                document_key="damaged-goods",
+                version="2026.1",
+                effective_from=now - timedelta(days=1),
+                effective_to=None,
+                scope={"region": "CN"},
+                body=(
+                    "Current synthetic damaged-goods policy: create a carrier "
+                    "inquiry automatically."
+                ),
             ),
             PolicyDocument(
                 document_key="refunds",
@@ -165,12 +203,15 @@ def reset_demo_data(session: Session) -> dict[str, object]:
 
     models = [
         ApprovalRequest,
+        ServiceAction,
+        AgentRun,
+        RetrievalEvidence,
+        ToolCall,
         TicketEvent,
+        WorkflowRun,
         Ticket,
         Message,
         Conversation,
-        ToolCall,
-        WorkflowRun,
         OrderItem,
         Shipment,
         Order,

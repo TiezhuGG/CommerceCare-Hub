@@ -32,6 +32,14 @@ API 前缀为 `/api/v1`，使用 JSON、OpenAPI、OAuth2/JWT（Phase 1）和统�
 
 `GET /conversations/{id}`、`GET /workflow-runs/{trace_id}` 和订单事实均执行 Customer 归属或 staff RBAC 检查。Phase 2 不提供退款、地址或承运商写操作。
 
+### Phase 3 request contract
+
+`POST /conversations/{id}/actions` 由 Customer 提交 `{action_type, order_number, reason_code, amount_minor?, address_reference?, simulate_timeout?}`，并要求 `Idempotency-Key`。动作类型为 `refund`、`return`、`address_update`、`damaged_item`；API 返回 action、ticket、trace 和可选 approval ID。
+
+`POST /approvals/{id}/decision` 仅接受 Supervisor 的 `{decision, reason_code, comment?}`，并要求 `Idempotency-Key`。批准只会将动作排队；由 outbox dispatcher 调用 provider。`POST /admin/outbox/dispatch` 仅限 Admin，也要求 `Idempotency-Key`，用于本地演示与可重试投递。
+
+`POST /admin/demo/reset` 在 development 环境中清空并在同一事务内重新加载合成数据，因此调用方需要重新登录；这避免了删除唯一 Admin 身份后无法再次 seed 的死锁。
+
 `POST /approvals/{id}/decision`：`{decision: APPROVE|REJECT, reason_code, comment?}`。决策必须由当前有权限的 Supervisor 作出，过期或已决请求返回 `APPROVAL_NOT_ACTIONABLE`。
 
 `GET /workflow-runs/{trace_id}` 不返回私有推理、提示词全文或未脱敏 PII；只返回 agent/工具/证据/状态迁移的结构化摘要。

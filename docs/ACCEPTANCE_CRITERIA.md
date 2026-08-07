@@ -30,6 +30,14 @@
 - [x] API integration、workflow、越权、缺失订单号、物流延迟和状态迁移失败路径都有回归测试。
 - [ ] 最小 chat/operator UI 的浏览器自动化待可用浏览器运行时执行；Compose runtime smoke test 已通过。
 
-Phase 3：退款、退货、地址变更、损坏商品遵循审批和幂等；重复退款、审批超时和写后断线被安全处理。
+### Phase 3
+
+- [x] Customer 只能为自己的订单和会话创建 `refund`、`return`、`address_update` 或 `damaged_item` 动作；每个请求含原因码和幂等键。
+- [x] 退款与地址变更必须创建可过期的审批请求；退货和损坏商品仅在确定性政策允许时自动排队执行。
+- [x] 所有动作经 Domain Service 写入 action record、ticket transition、audit log 和 outbox event；HTTP handler、Agent 和 provider 不得绕过该服务写业务状态。
+- [x] Supervisor 只能审批待处理且未过期的请求；拒绝和超时应安全终止/升级，不得执行 provider 写入。
+- [x] dispatch 仅执行一次成功的 provider 写入；相同动作/幂等键重放不产生第二次副作用，超时可重试并在耗尽后失败。
+- [x] 退款金额、订单归属、订单状态与动作类型均由确定性规则校验；地址仅保存引用 fingerprint，不保存明文。
+- [x] 正常、重复退款、provider timeout、审批超时、跨客户越权和写后重放均有回归测试与 Compose smoke test。
 
 Phase 4–6：所有 Agent 结构化输出与一次重试/安全降级可验证；100 个评估案例、故障注入、指标和演示 UI 可运行。

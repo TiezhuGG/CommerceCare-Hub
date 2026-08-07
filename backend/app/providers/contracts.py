@@ -48,6 +48,7 @@ class WriteCommand(BaseModel):
     actor_id: str
     reason_code: str
     idempotency_key: str
+    simulate_timeout: bool = False
 
 
 class WriteResult(BaseModel):
