@@ -40,4 +40,14 @@
 - [x] 退款金额、订单归属、订单状态与动作类型均由确定性规则校验；地址仅保存引用 fingerprint，不保存明文。
 - [x] 正常、重复退款、provider timeout、审批超时、跨客户越权和写后重放均有回归测试与 Compose smoke test。
 
-Phase 4–6：所有 Agent 结构化输出与一次重试/安全降级可验证；100 个评估案例、故障注入、指标和演示 UI 可运行。
+### Phase 4
+
+- [x] Router、Context、Policy、Resolution Planner、Risk/Compliance 和 Reply Agent 均通过结构化 provider interface 产出 Pydantic 校验结果；本地 deterministic mock 可端到端运行。
+- [x] 每次 Agent 调用记录 agent 名称、provider/model、prompt key/version、尝试次数、最小化输入/输出摘要、延迟与 token usage；不保存私有推理或完整 PII。
+- [x] schema 校验失败携带验证摘要重试一次；第二次失败或风险判定为 `ESCALATE` 时，工作流安全升级且绝不触发写 provider。
+- [x] Policy retrieval 只返回当前生效且 scope 匹配的版本化文档；缺失或冲突证据必须显式升级。
+- [x] Prompt registry 只解析 active 的版本化 prompt；缺失 prompt 或 provider 配置时安全降级到 deterministic mock 或人工升级。
+- [x] Coze intake 使用 HMAC 签名和版本化 schema；其 HTTP 边界无状态、无数据库业务写入，且每次调用有脱敏审计记录。
+- [x] 覆盖正常结构化流程、一次重试成功、两次 schema 失败、客户/政策 prompt injection、冲突策略和签名拒绝的单元/集成/工作流测试。
+
+Phase 5–6：100 个评估案例、故障注入、指标和演示 UI 可运行。

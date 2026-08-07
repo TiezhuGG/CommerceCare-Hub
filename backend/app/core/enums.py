@@ -63,3 +63,9 @@ class ActionStatus(StrEnum):
 class ApprovalDecision(StrEnum):
     APPROVE = "approve"
     REJECT = "reject"
+
+
+class RiskDecision(StrEnum):
+    ALLOW = "allow"
+    REQUIRE_APPROVAL = "require_approval"
+    ESCALATE = "escalate"

@@ -70,3 +70,9 @@ stateDiagram-v2
 ## 5. Coze 边界
 
 将提供无状态、签名认证的 HTTP 边界以接入 `wf_customer_intake`、`wf_order_context`、`wf_policy_retrieval`、`wf_resolution_plan`、`wf_risk_gate`、`wf_execute_action`、`wf_ticket_sync`、`wf_customer_reply`、`wf_quality_review`。每个端点采用版本化输入/输出 schema，并把 Coze 看作不可信调用者；核心交易状态仍归本系统所有。详细 request 示例与 schema 在 Phase 4 的 `workflows/coze/README.md` 交付。
+
+## Phase 4 runtime contract
+
+Each Agent invokes a `StructuredOutputProvider` with a resolved prompt key/version and a Pydantic output schema. The runtime retries a validation failure once with a compact validation summary. A second failure returns an auditable `ESCALATE` outcome; it does not invent a result and cannot call a write provider. The default local provider is deterministic; the optional OpenAI-compatible adapter is disabled unless explicitly configured.
+
+The first executable Coze boundary is `wf_customer_intake`: it is HMAC-signed, schema-versioned, read-only, and returns only the Router decision. Subsequent Coze flow contracts are documented but do not receive database credentials or permission to call domain write services.

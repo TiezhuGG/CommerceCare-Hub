@@ -41,12 +41,15 @@ def test_delivery_delay_workflow_returns_grounded_reply_and_trace(
     response = client.post(
         f"/api/v1/conversations/{conversation_id}/messages",
         headers={**headers, "Idempotency-Key": "message-delay-1"},
-        json={"message": "订单 CC-1001 为什么还没到？", "client_message_id": "client-delay-1"},
+        json={
+            "message": "Order CC-1001 is delayed and has not arrived.",
+            "client_message_id": "client-delay-1",
+        },
     )
 
     assert response.status_code == 200
     payload = response.json()
-    assert "延迟" in payload["customer_reply"]
+    assert "delivery-delay policy" in payload["customer_reply"]
     trace = client.get(f"/api/v1/workflow-runs/{payload['trace_id']}", headers=headers)
     assert trace.status_code == 200
     assert "RouterAgent" in trace.json()["agents"]
@@ -66,11 +69,11 @@ def test_missing_order_reference_safely_waits_for_customer(
     response = client.post(
         f"/api/v1/conversations/{conversation_id}/messages",
         headers={**headers, "Idempotency-Key": "message-missing-1"},
-        json={"message": "我的订单什么时候到？", "client_message_id": "client-missing-1"},
+        json={"message": "When will my order arrive?", "client_message_id": "client-missing-1"},
     )
 
     assert response.status_code == 200
-    assert "订单号" in response.json()["customer_reply"]
+    assert "order number" in response.json()["customer_reply"]
     detail = client.get(f"/api/v1/conversations/{conversation_id}", headers=headers)
     assert detail.json()["ticket_state"] == "waiting_customer"
 

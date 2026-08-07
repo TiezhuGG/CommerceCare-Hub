@@ -30,3 +30,7 @@ class PolicyViolationError(DomainError):
 
 class ProviderTimeoutError(DomainError):
     code = "PROVIDER_TIMEOUT"
+
+
+class StructuredProviderError(DomainError):
+    code = "STRUCTURED_PROVIDER_ERROR"

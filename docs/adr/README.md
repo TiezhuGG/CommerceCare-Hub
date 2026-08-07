@@ -1,5 +1,7 @@
 # Architecture Decision Records
 
+- [ADR-0007: Structured Agent runtime and restricted Coze boundary](0007-structured-agent-runtime-and-coze-boundary.md)
+
 - [ADR-0006: Phase 3 after-sales action boundary and conservative approvals](0006-phase3-after-sales-actions.md)
 
 - [ADR-0001: Agent、工作流与领域写入边界](0001-agent-workflow-domain-boundaries.md)

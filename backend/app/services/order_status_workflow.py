@@ -1,14 +1,26 @@
 import uuid
+from collections.abc import Sequence
+from typing import cast
 
-from sqlalchemy import select
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.enums import Intent, TicketState, WorkflowStatus
+from app.agents.factory import build_agent_service
+from app.agents.schemas import (
+    ContextResult,
+    ObservedFact,
+    PolicyResult,
+    ReplyResult,
+    ResolutionPlan,
+    RiskDecisionResult,
+    RouterDecision,
+)
+from app.agents.service import AgentInvocation, StructuredAgentService
+from app.core.enums import Intent, RiskDecision, TicketState, WorkflowStatus
 from app.models import (
     AgentRun,
     Conversation,
     Message,
-    PolicyDocument,
     RetrievalEvidence,
     Ticket,
     ToolCall,
@@ -16,26 +28,23 @@ from app.models import (
 )
 from app.providers.contracts import ShipmentFact
 from app.providers.mock import DeterministicMockCommerceProvider
+from app.services.policy_retrieval import PolicyRetrievalResult, PolicyRetrievalService
 from app.services.tickets import TicketDomainService
-from app.services.workflow_models import (
-    DeterministicRouter,
-    ObservedFact,
-    PolicyEvidence,
-    WorkflowResult,
-    observed_now,
-)
+from app.services.workflow_models import WorkflowResult, observed_now
 
 
 class OrderStatusWorkflowService:
-    """Phase 2 read-only workflow for order status and delivery delays."""
+    """Read-only workflow orchestrating schema-bound agents without granting write capabilities."""
 
     def __init__(
         self,
-        router: DeterministicRouter | None = None,
+        agents: StructuredAgentService | None = None,
         tickets: TicketDomainService | None = None,
+        policy_retrieval: PolicyRetrievalService | None = None,
     ) -> None:
-        self._router = router or DeterministicRouter()
+        self._agents = agents or build_agent_service()
         self._tickets = tickets or TicketDomainService()
+        self._policy_retrieval = policy_retrieval or PolicyRetrievalService()
 
     def run(
         self,
@@ -49,20 +58,23 @@ class OrderStatusWorkflowService:
         session.add(ticket)
         session.flush()
         workflow = WorkflowRun(
-            trace_id=ticket.trace_id,
-            ticket_id=ticket.id,
-            status=WorkflowStatus.RUNNING,
+            trace_id=ticket.trace_id, ticket_id=ticket.id, status=WorkflowStatus.RUNNING
         )
         session.add(workflow)
         session.flush()
 
-        decision = self._router.route(customer_message)
-        self._record_agent(
-            session,
-            workflow,
-            "RouterAgent",
-            input_summary={"message_length": len(customer_message)},
-            output_summary=decision.model_dump(mode="json"),
+        router = cast(
+            RouterDecision | None,
+            self._invoke(
+                session,
+                workflow,
+                agent_name="RouterAgent",
+                task="router",
+                prompt_key="router_agent",
+                payload={"message": customer_message},
+                output_model=RouterDecision,
+                input_summary={"message_length": len(customer_message)},
+            ),
         )
         self._tickets.transition(
             session,
@@ -71,43 +83,68 @@ class OrderStatusWorkflowService:
             event_type="INTENT_CLASSIFIED",
             actor_id=customer_actor_id,
         )
-
-        if decision.intent is Intent.UNKNOWN or decision.order_number is None:
+        if router is None:
+            return self._safe_escalate(
+                session,
+                workflow=workflow,
+                ticket=ticket,
+                conversation=conversation,
+                actor_id=customer_actor_id,
+                reason_code="ROUTER_SCHEMA_UNAVAILABLE",
+            )
+        if router.intent is Intent.UNKNOWN or router.order_number is None:
             return self._need_more_info(
                 session,
                 workflow=workflow,
                 ticket=ticket,
                 conversation=conversation,
                 actor_id=customer_actor_id,
-                reason="请提供订单号（例如 CC-1001），我才能查询订单和物流状态。",
+            )
+
+        if "prompt_injection_detected" in router.risk_tags:
+            self._invoke(
+                session,
+                workflow,
+                agent_name="RiskComplianceAgent",
+                task="risk",
+                prompt_key="risk_compliance_agent",
+                payload={"prompt_injection_detected": True, "confidence": router.confidence},
+                output_model=RiskDecisionResult,
+                input_summary={"signal_count": 1, "confidence": router.confidence},
+            )
+            return self._safe_escalate(
+                session,
+                workflow=workflow,
+                ticket=ticket,
+                conversation=conversation,
+                actor_id=customer_actor_id,
+                reason_code="PROMPT_INJECTION_DETECTED",
             )
 
         provider = DeterministicMockCommerceProvider(session)
-        order = provider.get_order(decision.order_number)
+        order = provider.get_order(router.order_number)
         self._record_tool(
             session,
             workflow,
             "get_order",
-            {"order_number": decision.order_number},
+            {"order_number": router.order_number},
             {"found": order is not None},
         )
         if order is None or order.customer_id != str(conversation.customer_id):
-            # Do not distinguish a missing reference from another customer's order.
             return self._need_more_info(
                 session,
                 workflow=workflow,
                 ticket=ticket,
                 conversation=conversation,
                 actor_id=customer_actor_id,
-                reason="未找到可供当前会话查询的订单，请核对订单号后重试。",
             )
 
-        shipment = provider.get_shipment(decision.order_number)
+        shipment = provider.get_shipment(router.order_number)
         self._record_tool(
             session,
             workflow,
             "get_shipment",
-            {"order_number": decision.order_number},
+            {"order_number": router.order_number},
             {"found": shipment is not None},
         )
         facts = [
@@ -129,13 +166,28 @@ class OrderStatusWorkflowService:
                     observed_at=observed_now(),
                 )
             )
-        self._record_agent(
-            session,
-            workflow,
-            "ContextAgent",
-            input_summary={"order_number": decision.order_number},
-            output_summary={"facts": [fact.model_dump(mode="json") for fact in facts]},
+        context = cast(
+            ContextResult | None,
+            self._invoke(
+                session,
+                workflow,
+                agent_name="ContextAgent",
+                task="context",
+                prompt_key="context_agent",
+                payload={"facts": [fact.model_dump(mode="json") for fact in facts]},
+                output_model=ContextResult,
+                input_summary={"fact_count": len(facts)},
+            ),
         )
+        if context is None:
+            return self._safe_escalate(
+                session,
+                workflow=workflow,
+                ticket=ticket,
+                conversation=conversation,
+                actor_id=customer_actor_id,
+                reason_code="CONTEXT_SCHEMA_UNAVAILABLE",
+            )
         self._tickets.transition(
             session,
             ticket=ticket,
@@ -144,14 +196,29 @@ class OrderStatusWorkflowService:
             actor_id=customer_actor_id,
         )
 
-        evidence = self._retrieve_policy(session, workflow, decision.intent)
-        self._record_agent(
-            session,
-            workflow,
-            "PolicyAgent",
-            input_summary={"intent": decision.intent.value},
-            output_summary={"evidence": evidence.model_dump(mode="json") if evidence else None},
+        retrieval = self._retrieve_policy(session, workflow, router.intent)
+        policy = cast(
+            PolicyResult | None,
+            self._invoke(
+                session,
+                workflow,
+                agent_name="PolicyAgent",
+                task="policy",
+                prompt_key="policy_agent",
+                payload={"evidence": [item.model_dump(mode="json") for item in retrieval.evidence]},
+                output_model=PolicyResult,
+                input_summary={"evidence_count": len(retrieval.evidence)},
+            ),
         )
+        if policy is None:
+            return self._safe_escalate(
+                session,
+                workflow=workflow,
+                ticket=ticket,
+                conversation=conversation,
+                actor_id=customer_actor_id,
+                reason_code="POLICY_SCHEMA_UNAVAILABLE",
+            )
         self._tickets.transition(
             session,
             ticket=ticket,
@@ -160,16 +227,95 @@ class OrderStatusWorkflowService:
             actor_id=customer_actor_id,
         )
 
-        reply = self._reply(order.order_number, order.status, shipment, evidence)
-        self._record_agent(
-            session,
-            workflow,
-            "ReplyAgent",
-            input_summary={"fact_count": len(facts), "policy_evidence": evidence is not None},
-            output_summary={"grounded": True, "reply_length": len(reply)},
+        plan = cast(
+            ResolutionPlan | None,
+            self._invoke(
+                session,
+                workflow,
+                agent_name="ResolutionPlannerAgent",
+                task="planner",
+                prompt_key="resolution_planner_agent",
+                payload={"intent": router.intent.value, "fact_count": len(context.facts)},
+                output_model=ResolutionPlan,
+                input_summary={"intent": router.intent.value, "fact_count": len(context.facts)},
+            ),
         )
+        if plan is None:
+            return self._safe_escalate(
+                session,
+                workflow=workflow,
+                ticket=ticket,
+                conversation=conversation,
+                actor_id=customer_actor_id,
+                reason_code="PLANNER_SCHEMA_UNAVAILABLE",
+            )
+        risk = cast(
+            RiskDecisionResult | None,
+            self._invoke(
+                session,
+                workflow,
+                agent_name="RiskComplianceAgent",
+                task="risk",
+                prompt_key="risk_compliance_agent",
+                payload={
+                    "confidence": router.confidence,
+                    "policy_conflict": retrieval.conflict_detected or policy.conflict_detected,
+                    "policy_missing": router.requires_evidence and not policy.applicable,
+                    "prompt_injection_detected": False,
+                },
+                output_model=RiskDecisionResult,
+                input_summary={
+                    "confidence": router.confidence,
+                    "policy_conflict": retrieval.conflict_detected,
+                },
+            ),
+        )
+        if risk is None or risk.decision is not RiskDecision.ALLOW:
+            return self._safe_escalate(
+                session,
+                workflow=workflow,
+                ticket=ticket,
+                conversation=conversation,
+                actor_id=customer_actor_id,
+                reason_code="RISK_REQUIRES_ESCALATION",
+            )
+
+        draft_reply = self._reply(order.order_number, order.status, shipment, policy.evidence)
+        reply = cast(
+            ReplyResult | None,
+            self._invoke(
+                session,
+                workflow,
+                agent_name="ReplyAgent",
+                task="reply",
+                prompt_key="reply_agent",
+                payload={
+                    "customer_reply": draft_reply,
+                    "cited_sources": [item.document_id for item in policy.evidence],
+                    "next_step": "Reply in this conversation if you need more help.",
+                },
+                output_model=ReplyResult,
+                input_summary={
+                    "fact_count": len(context.facts),
+                    "evidence_count": len(policy.evidence),
+                },
+            ),
+        )
+        if reply is None:
+            return self._safe_escalate(
+                session,
+                workflow=workflow,
+                ticket=ticket,
+                conversation=conversation,
+                actor_id=customer_actor_id,
+                reason_code="REPLY_SCHEMA_UNAVAILABLE",
+            )
         session.add(
-            Message(conversation_id=conversation.id, sender_type="assistant", body_redacted=reply)
+            Message(
+                conversation_id=conversation.id,
+                sender_type="assistant",
+                body_redacted=reply.customer_reply,
+            )
         )
         self._tickets.transition(
             session,
@@ -185,7 +331,7 @@ class OrderStatusWorkflowService:
             ticket_id=ticket.id,
             trace_id=ticket.trace_id,
             workflow_status=workflow.status.value,
-            customer_reply=reply,
+            customer_reply=reply.customer_reply,
         )
 
     def _need_more_info(
@@ -196,7 +342,6 @@ class OrderStatusWorkflowService:
         ticket: Ticket,
         conversation: Conversation,
         actor_id: uuid.UUID,
-        reason: str,
     ) -> WorkflowResult:
         self._tickets.transition(
             session,
@@ -212,15 +357,31 @@ class OrderStatusWorkflowService:
             event_type="WAITING_FOR_CUSTOMER",
             actor_id=actor_id,
         )
-        self._record_agent(
-            session,
-            workflow,
-            "ReplyAgent",
-            input_summary={"grounded": True, "missing_information": True},
-            output_summary={"grounded": True, "reply_length": len(reason)},
+        fallback = "Please provide the order number (for example CC-1001) so I can check it safely."
+        reply = cast(
+            ReplyResult | None,
+            self._invoke(
+                session,
+                workflow,
+                agent_name="ReplyAgent",
+                task="reply",
+                prompt_key="reply_agent",
+                payload={
+                    "customer_reply": fallback,
+                    "cited_sources": [],
+                    "next_step": "Provide an order number.",
+                },
+                output_model=ReplyResult,
+                input_summary={"missing_information": True},
+            ),
         )
+        customer_reply = reply.customer_reply if reply is not None else fallback
         session.add(
-            Message(conversation_id=conversation.id, sender_type="assistant", body_redacted=reason)
+            Message(
+                conversation_id=conversation.id,
+                sender_type="assistant",
+                body_redacted=customer_reply,
+            )
         )
         workflow.status = WorkflowStatus.SUCCEEDED
         workflow.final_result_code = "NEED_MORE_INFO"
@@ -229,87 +390,125 @@ class OrderStatusWorkflowService:
             ticket_id=ticket.id,
             trace_id=ticket.trace_id,
             workflow_status=workflow.status.value,
-            customer_reply=reason,
+            customer_reply=customer_reply,
+        )
+
+    def _safe_escalate(
+        self,
+        session: Session,
+        *,
+        workflow: WorkflowRun,
+        ticket: Ticket,
+        conversation: Conversation,
+        actor_id: uuid.UUID,
+        reason_code: str,
+    ) -> WorkflowResult:
+        self._tickets.transition(
+            session,
+            ticket=ticket,
+            to_state=TicketState.ESCALATED,
+            event_type="SAFE_AGENT_ESCALATION",
+            actor_id=actor_id,
+        )
+        customer_reply = "Your request needs human review. We have not taken any external action."
+        session.add(
+            Message(
+                conversation_id=conversation.id,
+                sender_type="assistant",
+                body_redacted=customer_reply,
+            )
+        )
+        workflow.status = WorkflowStatus.ESCALATED
+        workflow.final_result_code = reason_code
+        return WorkflowResult(
+            conversation_id=conversation.id,
+            ticket_id=ticket.id,
+            trace_id=ticket.trace_id,
+            workflow_status=workflow.status.value,
+            customer_reply=customer_reply,
         )
 
     def _retrieve_policy(
         self, session: Session, workflow: WorkflowRun, intent: Intent
-    ) -> PolicyEvidence | None:
+    ) -> PolicyRetrievalResult:
         if intent is not Intent.DELIVERY_DELAY:
-            return None
-        document = session.scalar(
-            select(PolicyDocument)
-            .where(PolicyDocument.document_key == "delivery-delay")
-            .where(PolicyDocument.effective_to.is_(None))
-            .order_by(PolicyDocument.effective_from.desc())
-        )
+            return PolicyRetrievalResult(evidence=[], conflict_detected=False)
+        retrieval = self._policy_retrieval.retrieve(session, document_key="delivery-delay")
         self._record_tool(
             session,
             workflow,
             "search_policy",
-            {"document_key": "delivery-delay"},
-            {"found": document is not None},
+            {"document_key": "delivery-delay", "region": "CN"},
+            {
+                "evidence_count": len(retrieval.evidence),
+                "conflict_detected": retrieval.conflict_detected,
+            },
         )
-        if document is None:
-            return None
-        evidence = PolicyEvidence(
-            document_id=str(document.id),
-            version=document.version,
-            effective_time=document.effective_from,
-            matched_section="delivery-delay",
-            relevance_score=100,
-        )
-        session.add(
-            RetrievalEvidence(
-                workflow_run_id=workflow.id,
-                document_id=evidence.document_id,
-                document_version=evidence.version,
-                matched_section=evidence.matched_section,
-                relevance_score=evidence.relevance_score,
-                observed_at=evidence.effective_time,
+        for evidence in retrieval.evidence:
+            session.add(
+                RetrievalEvidence(
+                    workflow_run_id=workflow.id,
+                    document_id=evidence.document_id,
+                    document_version=evidence.version,
+                    matched_section=evidence.matched_section,
+                    relevance_score=evidence.relevance_score,
+                    observed_at=evidence.effective_time,
+                )
             )
-        )
-        return evidence
+        return retrieval
 
-    @staticmethod
-    def _reply(
-        order_number: str,
-        order_status: str,
-        shipment: ShipmentFact | None,
-        evidence: PolicyEvidence | None,
-    ) -> str:
-        if shipment is None:
-            return f"订单 {order_number} 当前状态为 {order_status}。暂未查询到物流信息。"
-        tracking_number = shipment.tracking_number
-        shipment_status = shipment.status
-        if evidence is not None:
-            return (
-                f"订单 {order_number} 当前状态为 {order_status}；物流单 {tracking_number} 标记为"
-                f"{shipment_status}。依据当前配送延迟政策（版本 {evidence.version}），"
-                "请您等待物流状态更新；如状态持续未更新，可回复本会话继续协助。"
-            )
-        return (
-            f"订单 {order_number} 当前状态为 {order_status}；物流单 {tracking_number} "
-            f"状态为 {shipment_status}。"
+    def _invoke(
+        self,
+        session: Session,
+        workflow: WorkflowRun,
+        *,
+        agent_name: str,
+        task: str,
+        prompt_key: str,
+        payload: dict[str, object],
+        output_model: type[BaseModel],
+        input_summary: dict[str, object],
+    ) -> BaseModel | None:
+        invocation = self._agents.invoke(
+            session,
+            task=task,
+            prompt_key=prompt_key,
+            payload=payload,
+            output_model=output_model,
         )
+        self._record_agent(session, workflow, agent_name, invocation, input_summary)
+        return invocation.execution.output
 
-    @staticmethod
     def _record_agent(
+        self,
         session: Session,
         workflow: WorkflowRun,
         agent_name: str,
-        *,
+        invocation: AgentInvocation,
         input_summary: dict[str, object],
-        output_summary: dict[str, object],
     ) -> None:
+        output = invocation.execution.output
+        output_summary = (
+            output.model_dump(mode="json")
+            if output is not None
+            else {
+                "safe_escalation": True,
+                "validation_error_codes": invocation.execution.validation_error_codes,
+            }
+        )
         session.add(
             AgentRun(
                 workflow_run_id=workflow.id,
                 agent_name=agent_name,
-                prompt_key="deterministic-phase-2",
-                prompt_version="1",
+                provider_name=self._agents.provider_name,
+                model_name=self._agents.model_name,
+                prompt_key=invocation.prompt.key if invocation.prompt else None,
+                prompt_version=invocation.prompt.version if invocation.prompt else None,
+                attempt_count=invocation.execution.attempt_count,
                 input_summary=input_summary,
                 output_summary=output_summary,
+                latency_ms=invocation.execution.latency_ms,
+                token_usage=0,
             )
         )
 
@@ -329,4 +528,27 @@ class OrderStatusWorkflowService:
                 result_summary=result_summary,
                 status="succeeded",
             )
+        )
+
+    @staticmethod
+    def _reply(
+        order_number: str,
+        order_status: str,
+        shipment: ShipmentFact | None,
+        evidence: Sequence[object],
+    ) -> str:
+        if shipment is None:
+            return (
+                f"Order {order_number} is currently {order_status}. "
+                "Shipment information is unavailable."
+            )
+        if evidence:
+            return (
+                f"Order {order_number} is currently {order_status}; "
+                f"shipment {shipment.tracking_number} is {shipment.status}. "
+                "The current delivery-delay policy supports waiting for the next update."
+            )
+        return (
+            f"Order {order_number} is currently {order_status}; "
+            f"shipment {shipment.tracking_number} is {shipment.status}."
         )

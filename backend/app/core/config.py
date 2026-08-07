@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     seed_on_start: bool = False
     demo_password: str = "demo-password-change-me"
+    structured_provider: str = "deterministic_mock"
+    structured_provider_timeout_seconds: float = 15
+    openai_compatible_base_url: str = ""
+    openai_compatible_api_key: str = ""
+    openai_compatible_model: str = ""
+    coze_webhook_secret: str = "development-only-coze-webhook-secret"
 
     def model_post_init(self, __context: object) -> None:
         if (
@@ -24,6 +30,11 @@ class Settings(BaseSettings):
             and self.jwt_secret == "development-only-secret-change-me"
         ):
             raise ValueError("COMMERCECARE_JWT_SECRET must be set outside development")
+        if (
+            self.environment != "development"
+            and self.coze_webhook_secret == "development-only-coze-webhook-secret"
+        ):
+            raise ValueError("COMMERCECARE_COZE_WEBHOOK_SECRET must be set outside development")
 
 
 @lru_cache

@@ -20,7 +20,7 @@
 | tickets | `id`, `conversation_id`, `state`, `reason_code`, `trace_id` unique |
 | ticket_events | `id`, `ticket_id`, `event_type`, `from_state`, `to_state`, `actor_id` |
 | workflow_runs | `id`, `trace_id` unique, `ticket_id`, `status`, `final_result_code` |
-| agent_runs | `id`, `workflow_run_id`, `agent_name`, `prompt_key`, `prompt_version`, `input_summary`, `output_summary`, `latency_ms`, `token_usage` |
+| agent_runs | `id`, `workflow_run_id`, `agent_name`, `provider_name`, `model_name`, `prompt_key`, `prompt_version`, `attempt_count`, `input_summary`, `output_summary`, `latency_ms`, `token_usage` |
 | retrieval_evidence | `id`, `workflow_run_id`, `document_id`, `document_version`, `matched_section`, `relevance_score`, `observed_at` |
 | tool_calls | `id`, `workflow_run_id`, `tool_name`, `request_summary`, `result_summary`, `idempotency_key`, `status` |
 | approval_requests | `id`, `ticket_id`, `action_id`, `action_type`, `status`, `expires_at`, `decided_by` |
@@ -41,6 +41,8 @@ Phase 3 的地址动作仅持久化受控 address reference 的不可逆 fingerp
 ## 4. 策略与证据
 
 策略检索结果必须携带 `document_id`、`version`、`effective_time`、`matched_section`、`relevance_score` 和适用性判断。策略文本、客户消息、OCR/evidence metadata 均是不可信内容，不能改变系统指令或授权结论。
+
+Phase 4 的 `agent_runs` 仅记录已验证结构化输出的简洁摘要与 schema 失败原因；不得保存原始 prompt、完整客户消息或模型链路推理。策略 scope 至少使用 `region`，并为后续 `platform`、`shop` 与 `policy_type` 保留过滤契约。
 
 ## 5. 演示数据目标
 

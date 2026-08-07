@@ -2,6 +2,20 @@
 
 ## Current status
 
+**Phase 4 complete (2026-08-08).** CommerceCare Hub now runs six schema-bound, read-only AI agents behind a provider abstraction. It records minimized execution metadata, retries one invalid model response, safely escalates unsafe or unverifiable cases, and exposes a signed, stateless Coze intake boundary without permitting Coze business-state writes.
+
+### Phase 4 delivered
+
+- Router, Context, Policy, Resolution Planner, Risk/Compliance, and Reply agents use versioned prompts and Pydantic output schemas; the deterministic mock is the local default.
+- `b4f8e2a6c9d1` adds provider, model, and attempt-count metadata to auditable `agent_runs`.
+- Effective policy retrieval filters by time and scope. Missing or conflicting evidence, schema failure after one retry, and prompt-injection signals safely escalate without write-provider access.
+- `POST /api/v1/coze/v1/wf_customer_intake` verifies HMAC-SHA256, returns only a structured intake decision, performs no business-state write, and creates a redacted audit record.
+- Validation completed: Ruff, strict mypy, 26 backend tests, SQLite migration upgrade/downgrade/upgrade, Compose rebuild, demo reset/seed, customer delivery-delay workflow smoke test, and signed Coze intake smoke test.
+
+### Remaining known gap
+
+- Browser-driven Playwright coverage remains pending because the local browser automation runtime previously could not initialize its kernel assets. API, Docker, backend regression, and frontend production-build validation are complete.
+
 **Phase 3 — complete (2026-08-05).** The local application now supports customer-initiated refunds, returns, address updates, and damaged-item reports. Refunds and address updates wait for a Supervisor decision; low-risk actions dispatch through the durable outbox to the deterministic mock provider. Every mutation is idempotent and auditable.
 
 ### Phase 3 delivered

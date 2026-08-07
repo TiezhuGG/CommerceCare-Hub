@@ -1,12 +1,14 @@
 import uuid
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 
+from app.agents.factory import build_agent_service
+from app.agents.schemas import CozeCustomerIntakeRequest, CozeCustomerIntakeResponse, RouterDecision
 from app.api.deps import CurrentUserDep, SessionDep, require_idempotency_key, require_roles
 from app.core.config import get_settings
-from app.core.enums import ActionStatus, Role
+from app.core.enums import ActionStatus, Intent, RiskDecision, Role
 from app.core.errors import ApprovalNotActionableError, AuthorizationError
 from app.core.security import create_access_token, verify_password
 from app.models import (
@@ -48,6 +50,7 @@ from app.schemas import (
 from app.services.actions import AfterSalesActionService
 from app.services.audit import record_audit
 from app.services.authorization import ensure_conversation_access, ensure_order_access
+from app.services.coze import verify_coze_signature
 from app.services.idempotency import execute_idempotent
 from app.services.order_status_workflow import OrderStatusWorkflowService
 from app.services.outbox import OutboxDispatcher
@@ -55,6 +58,83 @@ from app.services.redaction import redact_customer_message
 from app.services.seed import reset_demo_data, seed_demo_data
 
 router = APIRouter(prefix="/api/v1")
+
+
+@router.post("/coze/v1/wf_customer_intake", response_model=CozeCustomerIntakeResponse)
+async def coze_customer_intake(
+    request: Request,
+    payload: CozeCustomerIntakeRequest,
+    session: SessionDep,
+) -> CozeCustomerIntakeResponse:
+    """Signed, stateless Coze subflow: classify only and never mutate business state."""
+
+    raw_body = await request.body()
+    signature = request.headers.get("X-Coze-Signature")
+    if not verify_coze_signature(
+        raw_body=raw_body,
+        signature=signature,
+        secret=get_settings().coze_webhook_secret,
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Coze signature")
+
+    agents = build_agent_service()
+    invocation = agents.invoke(
+        session,
+        task="router",
+        prompt_key="router_agent",
+        payload={"message": payload.message},
+        output_model=RouterDecision,
+    )
+    decision = cast(RouterDecision | None, invocation.execution.output)
+    if decision is None:
+        decision = RouterDecision(
+            intent=Intent.UNKNOWN,
+            missing_fields=["human_review"],
+            requires_evidence=True,
+            sentiment="neutral",
+            urgency="normal",
+            risk_tags=["router_schema_unavailable"],
+            confidence=0,
+            decision_summary="Structured classification was unavailable.",
+        )
+        outcome = RiskDecision.ESCALATE
+    elif "prompt_injection_detected" in decision.risk_tags:
+        outcome = RiskDecision.ESCALATE
+    else:
+        outcome = RiskDecision.ALLOW
+    try:
+        trace_id = uuid.UUID(request.state.trace_id)
+    except (AttributeError, TypeError, ValueError):
+        trace_id = None
+
+    audit = record_audit(
+        session,
+        event_type="COZE_CUSTOMER_INTAKE_CLASSIFIED",
+        resource_type="coze_correlation",
+        resource_id=payload.correlation_id,
+        trace_id=trace_id,
+        payload_redacted={
+            "intent": decision.intent.value,
+            "has_order_number": decision.order_number is not None,
+            "safe_outcome": outcome.value,
+            "agent_attempts": invocation.execution.attempt_count,
+            "prompt_key": invocation.prompt.key if invocation.prompt else None,
+            "prompt_version": invocation.prompt.version if invocation.prompt else None,
+            "provider_name": agents.provider_name,
+            "model_name": agents.model_name,
+        },
+    )
+    session.flush()
+    session.commit()
+    return CozeCustomerIntakeResponse(
+        correlation_id=payload.correlation_id,
+        intent=decision.intent,
+        order_number=decision.order_number,
+        missing_fields=decision.missing_fields,
+        requires_evidence=decision.requires_evidence,
+        safe_outcome=outcome,
+        audit_id=audit.id,
+    )
 
 
 @router.post("/auth/token", response_model=TokenResponse)

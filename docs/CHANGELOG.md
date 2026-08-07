@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-08-08
+
+### Added
+
+- Phase 4 structured Agent runtime with Pydantic-validated Router, Context, Policy, Resolution Planner, Risk/Compliance, and Reply decisions.
+- Active versioned prompt registry, deterministic structured-output mock provider, optional OpenAI-compatible adapter, and audit metadata for provider/model/prompt/retry details.
+- Effective scoped policy retrieval with explicit escalation for missing or conflicting evidence, plus injection-safe workflow fallbacks.
+- Signed, stateless Coze customer-intake contract and documentation for nine bounded Coze sub-flows.
+- Alembic migration `b4f8e2a6c9d1` and regression tests covering validation retry/failure, prompt injection, policy conflicts/missing evidence, and Coze HMAC rejection.
+
 ## 2026-08-05
 
 ### Added

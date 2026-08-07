@@ -40,6 +40,10 @@ API 前缀为 `/api/v1`，使用 JSON、OpenAPI、OAuth2/JWT（Phase 1）和统�
 
 `POST /admin/demo/reset` 在 development 环境中清空并在同一事务内重新加载合成数据，因此调用方需要重新登录；这避免了删除唯一 Admin 身份后无法再次 seed 的死锁。
 
+### Phase 4 Coze contract
+
+`POST /coze/v1/wf_customer_intake` is a stateless, signed integration boundary. It accepts `{schema_version, message, correlation_id}` and requires `X-Coze-Signature = hex(HMAC-SHA256(raw body, COMMERCECARE_COZE_WEBHOOK_SECRET))`. A valid request returns a versioned, validated Router decision and a safe outcome only; it neither receives JWT credentials nor reads/writes customer orders. Invalid signatures return HTTP 403 under the standard error envelope. See `workflows/coze/README.md` for the remaining sub-flow schemas and request examples.
+
 `POST /approvals/{id}/decision`：`{decision: APPROVE|REJECT, reason_code, comment?}`。决策必须由当前有权限的 Supervisor 作出，过期或已决请求返回 `APPROVAL_NOT_ACTIONABLE`。
 
 `GET /workflow-runs/{trace_id}` 不返回私有推理、提示词全文或未脱敏 PII；只返回 agent/工具/证据/状态迁移的结构化摘要。
