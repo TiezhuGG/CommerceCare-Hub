@@ -4,6 +4,10 @@
 
 ### Added
 
+- Phase 5 versioned 100-case synthetic evaluation suite, deterministic graders, persistent evaluation reports, critical safety release gate, and redacted SLO metrics.
+- Admin evaluation API, Supervisor/Admin metrics API, and local Reliability Metrics page with browser-verified evaluation interaction.
+- Reliability coverage for schema regressions, policy-text injection, unreadable context evidence, duplicate action replay, provider timeout, approval expiry, and cross-customer access.
+- Alembic migration `c5d9e7a3f1b2` for evaluation runs/results and ADR-0008 for deterministic release gates.
 - Phase 4 structured Agent runtime with Pydantic-validated Router, Context, Policy, Resolution Planner, Risk/Compliance, and Reply decisions.
 - Active versioned prompt registry, deterministic structured-output mock provider, optional OpenAI-compatible adapter, and audit metadata for provider/model/prompt/retry details.
 - Effective scoped policy retrieval with explicit escalation for missing or conflicting evidence, plus injection-safe workflow fallbacks.

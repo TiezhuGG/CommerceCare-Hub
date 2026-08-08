@@ -2,6 +2,20 @@
 
 ## Current status
 
+**Phase 5 complete (2026-08-08).** The local demo can run a persisted, deterministic 100-case evaluation suite without business side effects. Critical safety regressions block the SLO, while a minimal staff dashboard exposes only bounded reliability aggregates.
+
+### Phase 5 delivered
+
+- Synthetic seed data now includes exactly 100 active `2026.08` evaluation cases across the documented six categories.
+- `EvaluationService` invokes schema-bound analysis only, saves run/result reports and redacted audit records, and has no action, approval, outbox, customer-message, or write-provider capability.
+- `deterministic-v1` grades intent, fields, tool/parameter plans, policy evidence, authorization blocking, completion, grounded response, and duplicate-action protection. Critical failures mark a run `blocked`; non-critical quality below 90% marks `attention`.
+- `POST /api/v1/admin/evaluations/run` is Admin-only and idempotent; `GET /api/v1/metrics/dashboard` is restricted to Supervisor/Admin. The `/metrics` page runs and displays the suite locally.
+- Validation completed: Ruff, strict mypy, 34 backend tests, frontend typecheck/build, SQLite migration upgrade/downgrade/upgrade, Compose reset/seed plus 100-case API smoke test, and browser interaction that ran the dashboard suite to `healthy`.
+
+### Remaining known gap
+
+- The dashboard was browser-automated through the local runtime, but a standalone Playwright package/test suite is not yet committed as a project dependency. This is a Phase 6 hardening task, not a runtime limitation.
+
 **Phase 4 complete (2026-08-08).** CommerceCare Hub now runs six schema-bound, read-only AI agents behind a provider abstraction. It records minimized execution metadata, retries one invalid model response, safely escalates unsafe or unverifiable cases, and exposes a signed, stateless Coze intake boundary without permitting Coze business-state writes.
 
 ### Phase 4 delivered

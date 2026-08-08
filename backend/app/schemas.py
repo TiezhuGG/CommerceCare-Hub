@@ -157,3 +157,21 @@ class DispatchResponse(BaseModel):
     dispatched: int
     retried: int
     failed: int
+
+
+class EvaluationRunResponse(BaseModel):
+    evaluation_run_id: uuid.UUID
+    suite_version: str
+    status: str
+    summary: dict[str, object]
+
+
+class MetricsDashboardResponse(BaseModel):
+    generated_at: datetime
+    workflow_counts: dict[str, int]
+    action_counts: dict[str, int]
+    outbox_retry_count: int
+    audit_event_count: int
+    agent_latency_avg_ms: float
+    evaluation: dict[str, object]
+    slo_status: str

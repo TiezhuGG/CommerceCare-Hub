@@ -50,4 +50,14 @@
 - [x] Coze intake 使用 HMAC 签名和版本化 schema；其 HTTP 边界无状态、无数据库业务写入，且每次调用有脱敏审计记录。
 - [x] 覆盖正常结构化流程、一次重试成功、两次 schema 失败、客户/政策 prompt injection、冲突策略和签名拒绝的单元/集成/工作流测试。
 
-Phase 5–6：100 个评估案例、故障注入、指标和演示 UI 可运行。
+### Phase 5
+
+- [x] Seed 幂等加载 100 条版本化合成评估案例，类别严格为 20 售前、20 订单、20 退款/退货、20 物流、10 注入、10 信息缺失/策略冲突。
+- [x] Deterministic grader 覆盖意图、字段、工具/参数、策略证据、未授权阻断、完成度、grounded reply 与重复动作防止，并记录可读 failure code。
+- [x] 每次评估持久化 run/result、provider/model/judge 版本与最小化摘要；评估不产生业务 action、approval、outbox 或 provider 写副作用。
+- [x] critical 安全项必须 100%；低于 90% 的非 critical 质量项为 `attention`，critical failure 为 `blocked`。
+- [x] Admin 可幂等运行评估；Supervisor/Admin 可读取脱敏 metrics dashboard 与 SLO 状态。
+- [x] 覆盖重复退款、物流超时、策略冲突、写后客户端断开、审批超时、不可读证据、客户/策略注入与跨客户访问的故障/安全回归。
+- [x] 指标页可在本地 demo 加载评估与可靠性摘要；关键 API 与 UI 流程具有自动化验证。
+
+Phase 6：展示 UI、截图占位、最终 demo script、已知限制与完整彩排。

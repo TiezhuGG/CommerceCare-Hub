@@ -71,7 +71,7 @@ export default function WorkspacePage() {
         ))}
       </ul>
       <p>管理员可调用 outbox dispatch，将已批准动作派发至 mock provider。</p>
-      <a href="/">返回 Customer 售后页</a>
+      <p><a href="/metrics">打开可靠性指标</a> · <a href="/">返回 Customer 售后页</a></p>
     </main>
   );
 }

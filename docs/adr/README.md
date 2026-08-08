@@ -1,5 +1,7 @@
 # Architecture Decision Records
 
+- [ADR-0008: Persisted deterministic evaluation runs and release gates](0008-evaluation-runs-and-deterministic-release-gates.md)
+
 - [ADR-0007: Structured Agent runtime and restricted Coze boundary](0007-structured-agent-runtime-and-coze-boundary.md)
 
 - [ADR-0006: Phase 3 after-sales action boundary and conservative approvals](0006-phase3-after-sales-actions.md)

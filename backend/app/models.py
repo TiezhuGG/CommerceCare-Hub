@@ -21,6 +21,7 @@ from app.core.enums import (
     ActionStatus,
     ActionType,
     ApprovalStatus,
+    EvaluationRunStatus,
     Role,
     TicketState,
     WorkflowStatus,
@@ -279,6 +280,38 @@ class EvalCase(Base):
     input: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     expected_result: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class EvaluationRun(Base):
+    __tablename__ = "evaluation_runs"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    suite_version: Mapped[str] = mapped_column(String(32))
+    provider_name: Mapped[str] = mapped_column(String(64))
+    model_name: Mapped[str] = mapped_column(String(128))
+    judge_version: Mapped[str] = mapped_column(String(32))
+    status: Mapped[EvaluationRunStatus] = mapped_column(
+        Enum(EvaluationRunStatus, native_enum=False)
+    )
+    summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    started_at: Mapped[datetime] = created_at()
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class EvaluationResult(Base):
+    __tablename__ = "evaluation_results"
+    __table_args__ = (UniqueConstraint("evaluation_run_id", "eval_case_id"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    evaluation_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("evaluation_runs.id"), index=True
+    )
+    eval_case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("eval_cases.id"), index=True)
+    status: Mapped[str] = mapped_column(String(16))
+    scores: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    failure_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    output_summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class AuditLog(Base):

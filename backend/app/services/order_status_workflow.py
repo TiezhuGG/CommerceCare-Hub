@@ -92,7 +92,10 @@ class OrderStatusWorkflowService:
                 actor_id=customer_actor_id,
                 reason_code="ROUTER_SCHEMA_UNAVAILABLE",
             )
-        if router.intent is Intent.UNKNOWN or router.order_number is None:
+        if (
+            router.intent not in {Intent.ORDER_STATUS, Intent.DELIVERY_DELAY}
+            or router.order_number is None
+        ):
             return self._need_more_info(
                 session,
                 workflow=workflow,
@@ -187,6 +190,15 @@ class OrderStatusWorkflowService:
                 conversation=conversation,
                 actor_id=customer_actor_id,
                 reason_code="CONTEXT_SCHEMA_UNAVAILABLE",
+            )
+        if context.missing_facts or context.conflicting_facts:
+            return self._safe_escalate(
+                session,
+                workflow=workflow,
+                ticket=ticket,
+                conversation=conversation,
+                actor_id=customer_actor_id,
+                reason_code="CONTEXT_EVIDENCE_UNVERIFIABLE",
             )
         self._tickets.transition(
             session,

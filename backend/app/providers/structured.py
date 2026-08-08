@@ -53,15 +53,41 @@ class DeterministicMockStructuredProvider:
             delayed = any(
                 token in normalized for token in ("delay", "late", "延迟", "没到", "晚到")
             )
+            intent = "unknown"
+            requires_evidence = False
+            if "refund" in normalized or "退款" in normalized:
+                intent = "refund_request"
+                requires_evidence = True
+            elif "return" in normalized or "退货" in normalized:
+                intent = "return_request"
+                requires_evidence = True
+            elif "address" in normalized or "地址" in normalized:
+                intent = "update_address"
+                requires_evidence = True
+            elif any(token in normalized for token in ("damaged", "wrong item", "破损", "漏发")):
+                intent = "missing_wrong_or_damaged_item"
+                requires_evidence = True
+            elif any(
+                token in normalized for token in ("invoice", "price protection", "发票", "价保")
+            ):
+                intent = "invoice_or_price_protection"
+                requires_evidence = True
+            elif any(token in normalized for token in ("stock", "inventory", "库存")):
+                intent = "stock_and_delivery_question"
+            elif any(token in normalized for token in ("product", "商品", "产品")):
+                intent = "product_question"
+            if order_number and delayed:
+                intent = "delivery_delay"
+                requires_evidence = True
+            elif order_number and intent == "unknown":
+                intent = "order_status"
             return {
-                "intent": "delivery_delay"
-                if order_number and delayed
-                else "order_status"
-                if order_number
-                else "unknown",
+                "intent": intent,
                 "order_number": order_number,
-                "missing_fields": [] if order_number else ["order_number"],
-                "requires_evidence": delayed,
+                "missing_fields": []
+                if order_number or intent == "product_question"
+                else ["order_number"],
+                "requires_evidence": requires_evidence,
                 "sentiment": "urgent"
                 if "urgent" in normalized or "着急" in normalized
                 else "frustrated"

@@ -145,7 +145,7 @@ export default function HomePage() {
         </section>
       ) : null}
       {error ? <p role="alert">{error}</p> : null}
-      <p><a href="/workspace">打开主管审批队列</a></p>
+      <p><a href="/workspace">打开主管审批队列</a> · <a href="/metrics">打开可靠性指标</a></p>
     </main>
   );
 }

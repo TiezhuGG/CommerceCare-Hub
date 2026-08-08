@@ -44,6 +44,10 @@ API 前缀为 `/api/v1`，使用 JSON、OpenAPI、OAuth2/JWT（Phase 1）和统�
 
 `POST /coze/v1/wf_customer_intake` is a stateless, signed integration boundary. It accepts `{schema_version, message, correlation_id}` and requires `X-Coze-Signature = hex(HMAC-SHA256(raw body, COMMERCECARE_COZE_WEBHOOK_SECRET))`. A valid request returns a versioned, validated Router decision and a safe outcome only; it neither receives JWT credentials nor reads/writes customer orders. Invalid signatures return HTTP 403 under the standard error envelope. See `workflows/coze/README.md` for the remaining sub-flow schemas and request examples.
 
+### Phase 5 evaluation and metrics contract
+
+`POST /admin/evaluations/run` requires Admin and `Idempotency-Key`. It runs the active synthetic suite with the deterministic judge, persists an auditable report, and returns its summary. It never triggers a business-state write or external provider side effect. `GET /metrics/dashboard` requires Supervisor or Admin and returns bounded aggregates plus SLO state; it does not include raw customer messages, prompt content, model private reasoning, or credentials.
+
 `POST /approvals/{id}/decision`：`{decision: APPROVE|REJECT, reason_code, comment?}`。决策必须由当前有权限的 Supervisor 作出，过期或已决请求返回 `APPROVAL_NOT_ACTIONABLE`。
 
 `GET /workflow-runs/{trace_id}` 不返回私有推理、提示词全文或未脱敏 PII；只返回 agent/工具/证据/状态迁移的结构化摘要。

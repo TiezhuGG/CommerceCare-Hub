@@ -19,6 +19,9 @@ flowchart LR
   RC --> DS[Domain Services]
   DS --> WT[Write Tool Facade]
   WF --> AUD[Audit Recorder]
+  API --> EV[Evaluation Service]
+  EV --> GR[Deterministic Graders]
+  EV --> MET[Metrics Aggregator]
   API --> PG[(PostgreSQL)]
   WF --> Redis[(Redis)]
   RT & WT --> Providers[Commerce Provider Interfaces]
@@ -76,3 +79,9 @@ stateDiagram-v2
 Each Agent invokes a `StructuredOutputProvider` with a resolved prompt key/version and a Pydantic output schema. The runtime retries a validation failure once with a compact validation summary. A second failure returns an auditable `ESCALATE` outcome; it does not invent a result and cannot call a write provider. The default local provider is deterministic; the optional OpenAI-compatible adapter is disabled unless explicitly configured.
 
 The first executable Coze boundary is `wf_customer_intake`: it is HMAC-signed, schema-versioned, read-only, and returns only the Router decision. Subsequent Coze flow contracts are documented but do not receive database credentials or permission to call domain write services.
+
+## Phase 5 evaluation and reliability contract
+
+`EvaluationService` reads versioned synthetic `eval_cases`, invokes only schema-bound analysis/read-only retrieval, then persists a run/result report and a redacted audit event. It never invokes an after-sales Domain Service, write provider, outbox dispatcher, or customer-facing message endpoint. Deterministic graders own release thresholds: a critical failure produces `blocked`; a non-critical rate below the quality SLO produces `attention`.
+
+`MetricsService` aggregates durable workflow, action, outbox, Agent, audit, and latest evaluation records. It exposes counts and bounded latency aggregates to authorized staff; it does not expose prompt text, raw customer messages, private reasoning, or secrets.

@@ -28,6 +28,8 @@
 | policy_documents | `id`, `document_key`, `version`, `effective_from`, `effective_to`, `scope`, `body`, unique(`document_key`,`version`) |
 | prompt_versions | `id`, `prompt_key`, `version`, `template`, `active`, unique(`prompt_key`,`version`) |
 | eval_cases | `id`, `category`, `input`, `expected_result`, `active` |
+| evaluation_runs | `id`, `suite_version`, provider/model 与 judge version、`status`、开始/结束时间、聚合 summary；一次运行的不可变评估报告 |
+| evaluation_results | `id`, `evaluation_run_id`, `eval_case_id`, `status`、评分项、failure codes、最小化 output summary、延迟；unique(`evaluation_run_id`,`eval_case_id`) |
 | audit_logs | `id`, `trace_id`, `actor_id`, `event_type`, `resource_type`, `resource_id`, `payload_redacted`, `occurred_at` |
 | idempotency_records | `action_type`, `target_resource_id`, `idempotency_key` 联合唯一；保存首次响应以安全重放 |
 | outbox_events | `event_type`, aggregate 引用、payload、`attempts`、`last_error_code`、`published_at`；与领域写入同事务创建 |
@@ -43,6 +45,8 @@ Phase 3 的地址动作仅持久化受控 address reference 的不可逆 fingerp
 策略检索结果必须携带 `document_id`、`version`、`effective_time`、`matched_section`、`relevance_score` 和适用性判断。策略文本、客户消息、OCR/evidence metadata 均是不可信内容，不能改变系统指令或授权结论。
 
 Phase 4 的 `agent_runs` 仅记录已验证结构化输出的简洁摘要与 schema 失败原因；不得保存原始 prompt、完整客户消息或模型链路推理。策略 scope 至少使用 `region`，并为后续 `platform`、`shop` 与 `policy_type` 保留过滤契约。
+
+Phase 5 的 `evaluation_runs` / `evaluation_results` 是可审计质量记录，不是业务 workflow。评估输入来自版本化合成 fixtures；报告只保留结构化评分、失败原因和经过最小化的模型输出摘要。评估运行无权创建 action、approval、outbox event 或客户消息。
 
 ## 5. 演示数据目标
 

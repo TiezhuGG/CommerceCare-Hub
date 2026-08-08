@@ -37,8 +37,10 @@ from app.schemas import (
     ConversationResponse,
     CurrentUserResponse,
     DispatchResponse,
+    EvaluationRunResponse,
     LoginRequest,
     MessageResponse,
+    MetricsDashboardResponse,
     OrderResponse,
     SeedResponse,
     SendMessageRequest,
@@ -51,7 +53,9 @@ from app.services.actions import AfterSalesActionService
 from app.services.audit import record_audit
 from app.services.authorization import ensure_conversation_access, ensure_order_access
 from app.services.coze import verify_coze_signature
+from app.services.evaluation import EvaluationService
 from app.services.idempotency import execute_idempotent
+from app.services.metrics import MetricsService
 from app.services.order_status_workflow import OrderStatusWorkflowService
 from app.services.outbox import OutboxDispatcher
 from app.services.redaction import redact_customer_message
@@ -488,6 +492,43 @@ def dispatch_outbox(
     )
     session.commit()
     return DispatchResponse.model_validate(result)
+
+
+@router.post("/admin/evaluations/run", response_model=EvaluationRunResponse)
+def run_evaluation_suite(
+    session: SessionDep,
+    admin: Annotated[User, Depends(require_roles(Role.ADMIN))],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> EvaluationRunResponse:
+    """Run only the seeded synthetic suite; it has no business-write capability."""
+
+    def command() -> dict[str, object]:
+        report = EvaluationService().run(session, actor_id=admin.id)
+        session.flush()
+        return {
+            "evaluation_run_id": str(report.run.id),
+            "suite_version": report.run.suite_version,
+            "status": report.run.status.value,
+            "summary": report.run.summary,
+        }
+
+    result = execute_idempotent(
+        session,
+        action_type="run_evaluation_suite",
+        target_resource_id="synthetic_suite_2026.08",
+        idempotency_key=idempotency_key,
+        action=command,
+    )
+    session.commit()
+    return EvaluationRunResponse.model_validate(result)
+
+
+@router.get("/metrics/dashboard", response_model=MetricsDashboardResponse)
+def get_metrics_dashboard(
+    session: SessionDep,
+    _: Annotated[User, Depends(require_roles(Role.SUPERVISOR, Role.ADMIN))],
+) -> MetricsDashboardResponse:
+    return MetricsDashboardResponse.model_validate(MetricsService().dashboard(session))
 
 
 @router.get("/tickets", response_model=list[TicketSummaryResponse])

@@ -38,8 +38,15 @@ class ApprovalStatus(StrEnum):
 
 
 class Intent(StrEnum):
+    PRODUCT_QUESTION = "product_question"
+    STOCK_AND_DELIVERY_QUESTION = "stock_and_delivery_question"
     ORDER_STATUS = "order_status"
     DELIVERY_DELAY = "delivery_delay"
+    UPDATE_ADDRESS = "update_address"
+    REFUND_REQUEST = "refund_request"
+    RETURN_REQUEST = "return_request"
+    MISSING_WRONG_OR_DAMAGED_ITEM = "missing_wrong_or_damaged_item"
+    INVOICE_OR_PRICE_PROTECTION = "invoice_or_price_protection"
     UNKNOWN = "unknown"
 
 
@@ -69,3 +76,10 @@ class RiskDecision(StrEnum):
     ALLOW = "allow"
     REQUIRE_APPROVAL = "require_approval"
     ESCALATE = "escalate"
+
+
+class EvaluationRunStatus(StrEnum):
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    ATTENTION = "attention"
+    BLOCKED = "blocked"
