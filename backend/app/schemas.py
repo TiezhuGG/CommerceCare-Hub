@@ -123,6 +123,20 @@ class TicketSummaryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TicketEventResponse(BaseModel):
+    event_type: str
+    from_state: TicketState | None
+    to_state: TicketState | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TicketDetailResponse(TicketSummaryResponse):
+    conversation_id: uuid.UUID
+    events: list[TicketEventResponse]
+
+
 class ActionRequest(BaseModel):
     action_type: ActionType
     order_number: str = Field(pattern=r"^CC-\d{4,}$", max_length=64)

@@ -2,7 +2,7 @@
 
 CommerceCare Hub 是一个可本地运行的电商服务 AI Agent 系统，覆盖售前咨询、订单与物流查询，以及受控的售后处置。它面向面试演示，但以生产级的正确性、可审计性、可恢复性与安全边界为优先。
 
-当前仓库已完成 **Phase 5（评估与可靠性）**：在既有 Customer chat、受控售后动作与结构化 Agent 之上，系统可运行 100 条版本化合成评估、持久化评分报告、阻断 critical 安全回归，并在本地可靠性指标页展示 SLO 状态。
+当前仓库已完成 **Phase 6（演示包装与可视化材料）**：六个可导航页面将客户咨询、运营工单、主管审批、状态时间线、Trace/Audit 和可靠性指标串成一套可本地复跑的面试演示。所有展示数据仍经由已授权的 API 获取；模型、提示词、完整敏感字段和私有推理均不在 UI 暴露。
 
 ## 核心原则
 
@@ -32,7 +32,7 @@ CommerceCare Hub 是一个可本地运行的电商服务 AI Agent 系统，覆�
 4. Phase 3：售后动作、审批、幂等与重试（实现完成）
 5. Phase 4：结构化 Agent、知识库、提示词注册表与 Coze 边界（实现完成）
 6. Phase 5：评估、故障注入、安全回归与指标（实现完成）
-7. Phase 6：演示包装与可视化材料
+7. Phase 6：演示包装与可视化材料（实现完成）
 
 详见 [实施状态](docs/IMPLEMENTATION_STATUS.md)。
 
@@ -52,6 +52,8 @@ API 文档位于 `http://localhost:8000/docs`。合成演示账号是 `admin@dem
 
 启动后，Admin 可在 `http://localhost:3000/metrics` 运行合成评估并查看 SLO。评估仅使用已 seed 的测试用例和 deterministic mock；不会创建售后动作或调用写 provider。
 
+面试演示入口、账户与边界说明见 [演示脚本](docs/DEMO_SCRIPT.md)、[演示账号](docs/DEMO_ACCOUNTS.md)、[已知限制](docs/KNOWN_LIMITATIONS.md)、[后续路线图](docs/ROADMAP.md) 和 [截图目录](docs/assets/screenshots/README.md)。
+
 完整容器启动：
 
 ```powershell
@@ -67,5 +69,6 @@ uv run mypy backend/app
 uv run pytest
 npm --prefix frontend run check
 npm --prefix frontend run build
+npm --prefix frontend run test:e2e
 docker compose --env-file .env.example config
 ```

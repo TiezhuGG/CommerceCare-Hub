@@ -4,6 +4,9 @@
 
 ### Added
 
+- Phase 6 interview demo shell with six navigable pages: Customer Chat, Agent Workspace, Supervisor Approvals, Ticket Timeline, Trace & Audit, and Reliability Metrics.
+- Owner/RBAC-scoped `GET /api/v1/tickets/{ticket_id}` endpoint with a bounded, auditable ticket-state event timeline and cross-customer denial coverage.
+- Locked Playwright dependency, local-Compose customer-to-SLO regression flow, demo accounts/runbook, screenshot guidance, known limitations, and roadmap documents.
 - Phase 5 versioned 100-case synthetic evaluation suite, deterministic graders, persistent evaluation reports, critical safety release gate, and redacted SLO metrics.
 - Admin evaluation API, Supervisor/Admin metrics API, and local Reliability Metrics page with browser-verified evaluation interaction.
 - Reliability coverage for schema regressions, policy-text injection, unreadable context evidence, duplicate action replay, provider timeout, approval expiry, and cross-customer access.

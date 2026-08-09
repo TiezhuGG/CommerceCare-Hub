@@ -60,4 +60,10 @@
 - [x] 覆盖重复退款、物流超时、策略冲突、写后客户端断开、审批超时、不可读证据、客户/策略注入与跨客户访问的故障/安全回归。
 - [x] 指标页可在本地 demo 加载评估与可靠性摘要；关键 API 与 UI 流程具有自动化验证。
 
-Phase 6：展示 UI、截图占位、最终 demo script、已知限制与完整彩排。
+### Phase 6
+
+- [x] 六个可导航页面覆盖 Customer Chat、Agent Workspace、Supervisor Approvals、Ticket Timeline、Trace & Audit 和 Reliability Metrics；展示数据始终通过受控 API 获取。
+- [x] Ticket Timeline、Trace 与 Audit 继续执行服务端 RBAC/归属校验；页面不显示完整敏感字段、提示词或私有推理。
+- [x] README、演示账号、架构图、最终 demo script、截图占位、已知限制和 roadmap 均可供面试演示使用。
+- [x] Playwright 作为锁定开发依赖，关键 UI 流程可在本地 Compose 环境重复执行。
+- [x] 在 reset/seed 后完成一次完整彩排：客户物流咨询、主管审批、timeline/trace、100 条评估和 dashboard SLO 均可展示。

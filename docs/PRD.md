@@ -8,6 +8,10 @@ The interview-demo implementation uses a deliberately conservative approval rule
 
 Phase 4 adds model-like structured analysis, not autonomous transaction execution. A schema-validated Risk/Compliance decision can explain whether a workflow should allow, request approval, or escalate, but it cannot directly alter an order, approval, or action. During this phase, policy/risk signals may make existing conservative rules stricter; they never relax the Phase 3 domain-service checks.
 
+## Phase 6 presentation decision
+
+The interview demo exposes customer, operator, supervisor, trace/audit, ticket timeline, and reliability views as separate, role-aware UI surfaces. Presentation pages render only existing API contracts and minimized audit summaries; they do not introduce a UI-only data store, privileged browser action, or direct business-state mutation. The committed browser test covers navigation and the safety-critical dashboard path against the local stack.
+
 ## 1. 目标与边界
 
 CommerceCare Hub 为电商客户提供售前、售后和工单协同服务。它不是 FAQ 聊天机器人：每一项可改变外部或业务状态的建议都必须经过确定性业务规则、授权和审计。

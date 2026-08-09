@@ -48,6 +48,10 @@ API 前缀为 `/api/v1`，使用 JSON、OpenAPI、OAuth2/JWT（Phase 1）和统�
 
 `POST /admin/evaluations/run` requires Admin and `Idempotency-Key`. It runs the active synthetic suite with the deterministic judge, persists an auditable report, and returns its summary. It never triggers a business-state write or external provider side effect. `GET /metrics/dashboard` requires Supervisor or Admin and returns bounded aggregates plus SLO state; it does not include raw customer messages, prompt content, model private reasoning, or credentials.
 
+### Phase 6 ticket timeline contract
+
+`GET /tickets/{ticket_id}` is available to the ticket's Customer or to scoped staff. It returns the current ticket state, trace ID, and an ordered state-transition timeline. It contains no customer-message body, address reference, prompt text, or private reasoning. The endpoint is read-only and relies on the existing conversation ownership/RBAC check.
+
 `POST /approvals/{id}/decision`：`{decision: APPROVE|REJECT, reason_code, comment?}`。决策必须由当前有权限的 Supervisor 作出，过期或已决请求返回 `APPROVAL_NOT_ACTIONABLE`。
 
 `GET /workflow-runs/{trace_id}` 不返回私有推理、提示词全文或未脱敏 PII；只返回 agent/工具/证据/状态迁移的结构化摘要。

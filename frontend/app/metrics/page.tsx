@@ -69,7 +69,7 @@ export default function MetricsPage() {
       <h1>Reliability metrics</h1>
       <p>仅展示聚合指标与评估结果；不显示客户原文、提示词或内部推理。</p>
       <button onClick={() => void loadDashboard()}>加载指标</button>
-      <button onClick={() => void runEvaluation()} disabled={loading}>
+      <button data-testid="run-evaluation" onClick={() => void runEvaluation()} disabled={loading}>
         {loading ? "正在运行评估…" : "运行 100 条合成评估"}
       </button>
       {error ? <p role="alert">{error}</p> : null}

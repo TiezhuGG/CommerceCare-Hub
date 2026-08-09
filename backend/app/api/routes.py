@@ -45,6 +45,8 @@ from app.schemas import (
     SeedResponse,
     SendMessageRequest,
     SendMessageResponse,
+    TicketDetailResponse,
+    TicketEventResponse,
     TicketSummaryResponse,
     TokenResponse,
     WorkflowTraceResponse,
@@ -538,6 +540,38 @@ def list_tickets(
 ) -> list[TicketSummaryResponse]:
     tickets = session.scalars(select(Ticket).order_by(Ticket.created_at.desc()).limit(100)).all()
     return [TicketSummaryResponse.model_validate(ticket) for ticket in tickets]
+
+
+@router.get("/tickets/{ticket_id}", response_model=TicketDetailResponse)
+def get_ticket_detail(
+    ticket_id: uuid.UUID, session: SessionDep, current_user: CurrentUserDep
+) -> TicketDetailResponse:
+    ticket = session.get(Ticket, ticket_id)
+    if ticket is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    conversation = session.get(Conversation, ticket.conversation_id)
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Ticket conversation not found"
+        )
+    try:
+        ensure_conversation_access(current_user, conversation)
+    except AuthorizationError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=error.message) from error
+    events = session.scalars(
+        select(TicketEvent)
+        .where(TicketEvent.ticket_id == ticket.id)
+        .order_by(TicketEvent.created_at)
+    ).all()
+    return TicketDetailResponse(
+        id=ticket.id,
+        state=ticket.state,
+        reason_code=ticket.reason_code,
+        trace_id=ticket.trace_id,
+        created_at=ticket.created_at,
+        conversation_id=ticket.conversation_id,
+        events=[TicketEventResponse.model_validate(event) for event in events],
+    )
 
 
 @router.get("/workflow-runs/{trace_id}", response_model=WorkflowTraceResponse)

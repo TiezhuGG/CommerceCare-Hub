@@ -85,3 +85,7 @@ The first executable Coze boundary is `wf_customer_intake`: it is HMAC-signed, s
 `EvaluationService` reads versioned synthetic `eval_cases`, invokes only schema-bound analysis/read-only retrieval, then persists a run/result report and a redacted audit event. It never invokes an after-sales Domain Service, write provider, outbox dispatcher, or customer-facing message endpoint. Deterministic graders own release thresholds: a critical failure produces `blocked`; a non-critical rate below the quality SLO produces `attention`.
 
 `MetricsService` aggregates durable workflow, action, outbox, Agent, audit, and latest evaluation records. It exposes counts and bounded latency aggregates to authorized staff; it does not expose prompt text, raw customer messages, private reasoning, or secrets.
+
+## Phase 6 demo UI contract
+
+The Next.js demo has six independently navigable views: Customer Chat, Agent Workspace, Supervisor Approvals, Ticket Timeline, Trace & Audit, and Reliability Metrics. UI components authenticate through the documented API and display only role-scoped responses. The Ticket Timeline API verifies the same conversation ownership/RBAC boundary as messages and traces; the UI does not infer ownership client-side.

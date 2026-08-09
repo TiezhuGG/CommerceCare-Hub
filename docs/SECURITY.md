@@ -14,6 +14,7 @@
 - Coze webhook 仅接受 HMAC-SHA256 签名的原始请求体；签名失败、未知 schema version 或超出大小限制的请求一律拒绝。该边界不能携带数据库会话、JWT 或写 provider capability。
 - Agent runtime 仅把最少必要上下文传给 provider，并持久化验证后的决策摘要。prompt injection 信号、策略冲突、低置信度和连续 schema 失败均进入安全升级，不会自动执行业务动作。
 - 评估运行只接受已 seed 的 versioned synthetic cases；HTTP 调用方不能提交任意 prompt、provider 或故障脚本。评估服务无写 provider capability，critical 安全评分失败会把 SLO 状态标记为 `blocked`。
+- 演示 UI 的身份令牌仅驻留于浏览器内存；页面不保存密码、JWT、完整客户消息、提示词或地址。Ticket Timeline、Trace 与 Audit 页面继续依赖服务端 RBAC/归属校验，而非 UI 隐藏按钮。
 
 ## 必测威胁
 

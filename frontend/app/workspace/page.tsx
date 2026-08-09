@@ -3,75 +3,40 @@
 import { useState } from "react";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
+type Ticket = { id: string; state: string; reason_code: string; trace_id: string; created_at: string };
+type TicketDetail = Ticket & { events: Array<{ event_type: string; from_state: string | null; to_state: string | null; created_at: string }> };
 
-type Approval = { id: string; action_id: string; status: string; action_status: string };
-
-export default function WorkspacePage() {
-  const [approvals, setApprovals] = useState<Approval[]>([]);
+export default function AgentWorkspacePage() {
   const [token, setToken] = useState("");
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [selected, setSelected] = useState<TicketDetail | null>(null);
   const [error, setError] = useState("");
 
-  async function loadApprovals() {
+  async function loadWorkspace() {
     setError("");
-    const login = await fetch(`${apiBaseUrl}/auth/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "supervisor@demo.local", password: "demo-password-change-me" }),
-    });
-    if (!login.ok) {
-      setError("无法登录 Supervisor 演示账号。");
-      return;
-    }
-    const { access_token: accessToken } = (await login.json()) as { access_token: string };
-    setToken(accessToken);
-    const response = await fetch(`${apiBaseUrl}/approvals`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!response.ok) {
-      setError("无法读取审批队列。");
-      return;
-    }
-    setApprovals((await response.json()) as Approval[]);
+    try {
+      const login = await fetch(`${apiBaseUrl}/auth/token`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "operator@demo.local", password: "demo-password-change-me" }) });
+      if (!login.ok) throw new Error("无法登录 Agent Operator 演示账号。");
+      const accessToken = ((await login.json()) as { access_token: string }).access_token;
+      setToken(accessToken);
+      const response = await fetch(`${apiBaseUrl}/tickets`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!response.ok) throw new Error("无法读取工单队列。");
+      setTickets((await response.json()) as Ticket[]);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "无法读取工作台。"); }
   }
 
-  async function decide(approvalId: string, decision: "approve" | "reject") {
-    const response = await fetch(`${apiBaseUrl}/approvals/${approvalId}/decision`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "Idempotency-Key": crypto.randomUUID(),
-      },
-      body: JSON.stringify({ decision, reason_code: "SUPERVISOR_REVIEW" }),
-    });
-    if (!response.ok) {
-      setError("该审批已过期或不可处理。");
-      return;
-    }
-    await loadApprovals();
+  async function openTicket(ticket: Ticket) {
+    try {
+      const response = await fetch(`${apiBaseUrl}/tickets/${ticket.id}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) throw new Error("无法读取工单详情。");
+      setSelected((await response.json()) as TicketDetail);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "无法读取工单详情。"); }
   }
 
-  return (
-    <main>
-      <h1>Supervisor approval queue</h1>
-      <p>仅展示必要的审批状态；客户敏感地址只以引用指纹保存，不会在队列中展示。</p>
-      <button onClick={loadApprovals}>加载审批队列</button>
-      {error ? <p role="alert">{error}</p> : null}
-      <ul>
-        {approvals.map((approval) => (
-          <li key={approval.id}>
-            <p>审批：{approval.status}；动作：{approval.action_status}</p>
-            {approval.status === "pending" ? (
-              <>
-                <button onClick={() => decide(approval.id, "approve")}>批准</button>
-                <button onClick={() => decide(approval.id, "reject")}>拒绝</button>
-              </>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-      <p>管理员可调用 outbox dispatch，将已批准动作派发至 mock provider。</p>
-      <p><a href="/metrics">打开可靠性指标</a> · <a href="/">返回 Customer 售后页</a></p>
-    </main>
-  );
+  return <main>
+    <h1>Agent Workspace</h1><p className="lead">运营人员查看受权限保护的工单与状态事件；此页面不展示客户原文、提示词或内部风险分。</p>
+    <button onClick={() => void loadWorkspace()}>加载运营工作台</button>{error ? <p className="error" role="alert">{error}</p> : null}
+    <div className="grid"><section className="card"><h2>工单队列</h2>{tickets.length ? <ul>{tickets.map((ticket) => <li key={ticket.id}><button onClick={() => void openTicket(ticket)}>{ticket.reason_code} · {ticket.state}</button><p className="muted">{ticket.id.slice(0, 8)} · {ticket.created_at}</p></li>)}</ul> : <p className="muted">加载后显示最多 100 条工单。</p>}</section>
+    <section className="card"><h2>工单时间线</h2>{selected ? <><p>状态：<span className={`pill pill-${selected.state}`}>{selected.state}</span></p><p className="muted">Trace：{selected.trace_id}</p><ol className="timeline">{selected.events.map((event, index) => <li key={`${event.created_at}-${index}`}><strong>{event.event_type}</strong><br /><span className="muted">{event.from_state ?? "none"} → {event.to_state ?? "none"} · {event.created_at}</span></li>)}</ol></> : <p className="muted">选择左侧工单以查看状态事件。</p>}</section></div>
+  </main>;
 }

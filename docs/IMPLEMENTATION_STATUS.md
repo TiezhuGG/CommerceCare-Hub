@@ -2,6 +2,16 @@
 
 ## Current status
 
+**Phase 6 complete (2026-08-08).** The demo has six navigable, role-aware pages backed exclusively by controlled APIs. A scoped ticket-detail endpoint exposes state events without bypassing RBAC, and a locked Playwright suite verifies a customer consultation through the local reliability dashboard.
+
+### Phase 6 delivered
+
+- Customer Chat, Agent Workspace, Supervisor Approvals, Ticket Timeline, Trace & Audit, and Reliability Metrics are reachable from one responsive navigation shell.
+- `GET /api/v1/tickets/{ticket_id}` returns a bounded ticket event timeline after the existing server-side conversation ownership/RBAC check. It never returns message bodies, prompts, risk scores, or private reasoning.
+- The demo package includes role accounts, a runbook, screenshot capture guidance, known limitations, and a roadmap for interview handoff.
+- `@playwright/test` is locked in the frontend package. `npm --prefix frontend run test:e2e` passed against the running Compose environment, including customer workflow execution and 100-case `healthy` evaluation verification.
+- Validation completed: Ruff, strict mypy, 27 backend tests, frontend typecheck/production build, Compose rebuild, Alembic upgrade to `c5d9e7a3f1b2`, and the Playwright smoke flow.
+
 **Phase 5 complete (2026-08-08).** The local demo can run a persisted, deterministic 100-case evaluation suite without business side effects. Critical safety regressions block the SLO, while a minimal staff dashboard exposes only bounded reliability aggregates.
 
 ### Phase 5 delivered
@@ -12,9 +22,9 @@
 - `POST /api/v1/admin/evaluations/run` is Admin-only and idempotent; `GET /api/v1/metrics/dashboard` is restricted to Supervisor/Admin. The `/metrics` page runs and displays the suite locally.
 - Validation completed: Ruff, strict mypy, 34 backend tests, frontend typecheck/build, SQLite migration upgrade/downgrade/upgrade, Compose reset/seed plus 100-case API smoke test, and browser interaction that ran the dashboard suite to `healthy`.
 
-### Remaining known gap
+### Phase 5 gap closed in Phase 6
 
-- The dashboard was browser-automated through the local runtime, but a standalone Playwright package/test suite is not yet committed as a project dependency. This is a Phase 6 hardening task, not a runtime limitation.
+- The standalone Playwright package/test suite is now committed and is run against local Compose as part of the Phase 6 rehearsal.
 
 **Phase 4 complete (2026-08-08).** CommerceCare Hub now runs six schema-bound, read-only AI agents behind a provider abstraction. It records minimized execution metadata, retries one invalid model response, safely escalates unsafe or unverifiable cases, and exposes a signed, stateless Coze intake boundary without permitting Coze business-state writes.
 
